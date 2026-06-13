@@ -1,7 +1,7 @@
 import React from "react";
-import Agent from "@/components/Agent";
-import { getCurrentUser } from "@/lib/actions/auth.action";
 import { redirect } from "next/navigation";
+import { getCurrentUser } from "@/lib/actions/auth.action";
+import InterviewForm from "@/components/InterviewForm";
 
 const Page = async () => {
   const user = await getCurrentUser();
@@ -9,12 +9,8 @@ const Page = async () => {
 
   return (
     <>
-      <h3>Interview Generation</h3>
-      <Agent
-        userName={user.name}
-        userId={user.id}
-        type="generate"
-      />
+      <h3>Create a New Interview</h3>
+      <InterviewForm userId={user.id} />
     </>
   );
 };
