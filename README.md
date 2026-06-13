@@ -4,7 +4,7 @@ A full-stack AI-powered interview preparation platform that conducts real voice 
 
 ## Live Demo
 
-> Deploy to Vercel and add your URL here.
+**[https://mock-ai-prep.vercel.app](https://mock-ai-prep.vercel.app)**
 
 ---
 
@@ -145,4 +145,4 @@ Vercel auto-deploys on every push to `main`.
 
 ## Screenshots
 
-_Add screenshots here after deployment._
+Visit the live app at **[https://mock-ai-prep.vercel.app](https://mock-ai-prep.vercel.app)** to see it in action.
