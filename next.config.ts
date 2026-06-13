@@ -1,13 +1,30 @@
 import type { NextConfig } from "next";
+import path from "path";
 
 const nextConfig: NextConfig = {
-  /* config options here */
-  eslint: {
-      ignoreDuringBuilds: true,
+  webpack(config) {
+    // Shim buffer-equal-constant-time for Node 22+ (SlowBuffer was removed)
+    config.resolve.alias["buffer-equal-constant-time"] = path.join(
+      __dirname,
+      "lib/buffer-shim.js"
+    );
+    return config;
   },
-    typescript: {
-      ignoreBuildErrors: true,
-    }
+  images: {
+    remotePatterns: [
+      {
+        protocol: "https",
+        hostname: "cdn.jsdelivr.net",
+        pathname: "/gh/devicons/devicon/**",
+      },
+    ],
+  },
+  eslint: {
+    ignoreDuringBuilds: true,
+  },
+  typescript: {
+    ignoreBuildErrors: true,
+  },
 };
 
 export default nextConfig;

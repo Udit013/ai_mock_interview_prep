@@ -1,13 +1,22 @@
-import React from 'react'
+import React from "react";
 import Agent from "@/components/Agent";
+import { getCurrentUser } from "@/lib/actions/auth.action";
+import { redirect } from "next/navigation";
 
-const Page = () => {
-    return (
-        <>
-            <h3>Interview Generation</h3>
+const Page = async () => {
+  const user = await getCurrentUser();
+  if (!user) redirect("/sign-in");
 
-            <Agent userName="You" userId="user1" type="generate" />
-        </>
-    )
-}
-export default Page
+  return (
+    <>
+      <h3>Interview Generation</h3>
+      <Agent
+        userName={user.name}
+        userId={user.id}
+        type="generate"
+      />
+    </>
+  );
+};
+
+export default Page;
