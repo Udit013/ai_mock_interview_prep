@@ -21,18 +21,20 @@ export async function getLatestInterviews({
   limit = 20,
 }: GetLatestInterviewsParams): Promise<Interview[]> {
   try {
+    // Single-field where avoids composite index requirement; filter + sort client-side
     const snapshot = await db
       .collection("interviews")
-      .orderBy("createdAt", "desc")
       .where("finalized", "==", true)
-      .where("userId", "!=", userId)
-      .limit(limit)
       .get();
 
-    return snapshot.docs.map((doc) => ({
-      id: doc.id,
-      ...doc.data(),
-    })) as Interview[];
+    return snapshot.docs
+      .map((doc) => ({ id: doc.id, ...doc.data() }) as Interview)
+      .filter((i) => i.userId !== userId)
+      .sort(
+        (a, b) =>
+          new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+      )
+      .slice(0, limit);
   } catch (e) {
     console.error("getLatestInterviews error:", e);
     return [];
@@ -41,16 +43,18 @@ export async function getLatestInterviews({
 
 export async function getInterviewsByUserId(userId: string): Promise<Interview[]> {
   try {
+    // Single-field where; sort client-side to avoid needing a composite index
     const snapshot = await db
       .collection("interviews")
       .where("userId", "==", userId)
-      .orderBy("createdAt", "desc")
       .get();
 
-    return snapshot.docs.map((doc) => ({
-      id: doc.id,
-      ...doc.data(),
-    })) as Interview[];
+    return snapshot.docs
+      .map((doc) => ({ id: doc.id, ...doc.data() }) as Interview)
+      .sort(
+        (a, b) =>
+          new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+      );
   } catch (e) {
     console.error("getInterviewsByUserId error:", e);
     return [];

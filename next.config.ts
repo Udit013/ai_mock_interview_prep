@@ -10,6 +10,11 @@ const nextConfig: NextConfig = {
     );
     return config;
   },
+  turbopack: {
+    resolveAlias: {
+      "buffer-equal-constant-time": "./lib/buffer-shim.js",
+    },
+  },
   images: {
     remotePatterns: [
       {
