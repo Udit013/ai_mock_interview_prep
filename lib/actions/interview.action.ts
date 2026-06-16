@@ -95,7 +95,7 @@ export async function createFeedback({
       .join("\n");
 
     const { object: feedbackData } = await generateObject({
-      model: google("gemini-2.0-flash-001"),
+      model: google("gemini-2.5-flash"),
       schema: feedbackSchema,
       prompt: `You are an expert interview coach analyzing a mock job interview transcript.
 
