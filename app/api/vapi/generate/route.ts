@@ -23,15 +23,29 @@ export async function POST(request: Request) {
         The questions are going to be read by a voice assistant so do not use "/" or "*" or any other special characters which might break the voice assistant.
         Return the questions formatted like this:
         ["Question 1", "Question 2", "Question 3"]
-        
+
         Thank you! <3
     `,
         });
 
+        // Gemini often wraps JSON in markdown fences (```json ... ```); strip them before parsing.
+        const cleaned = questions
+            .trim()
+            .replace(/^```(?:json)?\s*/i, "")
+            .replace(/```$/i, "")
+            .trim();
+
+        let parsedQuestions: string[];
+        try {
+            parsedQuestions = JSON.parse(cleaned);
+        } catch {
+            throw new Error("Failed to parse questions returned by the AI model.");
+        }
+
         const interview = {
             role, type, level,
             techstack: techstack.split(','),
-            questions: JSON.parse(questions),
+            questions: parsedQuestions,
             userId: userid,
             finalized: true,
             coverImage: getRandomInterviewCover(),
@@ -42,8 +56,10 @@ export async function POST(request: Request) {
 
         return Response.json({ success: true}, {status: 200})
     } catch (error) {
-        console.error(error);
+        console.error("generate interview error:", error);
 
-        return Response.json({ success: false, error }, { status: 500 });
+        const message =
+            error instanceof Error ? error.message : "Failed to generate interview.";
+        return Response.json({ success: false, error: message }, { status: 500 });
     }
 }
