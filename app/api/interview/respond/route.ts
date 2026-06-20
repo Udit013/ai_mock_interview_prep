@@ -1,5 +1,9 @@
-import { generateText } from "ai";
-import { google } from "@ai-sdk/google";
+import {
+  runAdaptiveTurn,
+  maxExchangesFor,
+  DEFAULT_INTERVIEW_STATE,
+  type InterviewStateSchema,
+} from "@/lib/ai/adaptive";
 
 interface ConversationMessage {
   role: "user" | "assistant" | "system";
@@ -11,9 +15,11 @@ interface RequestBody {
   level: string;
   type: string;
   questions: string[];
-  currentQuestionIndex: number;
   userAnswer: string;
   conversationHistory: ConversationMessage[];
+  // Adaptive engine state (optional for backwards compatibility).
+  interviewState?: InterviewStateSchema;
+  exchangeCount?: number;
 }
 
 export async function POST(request: Request) {
@@ -24,52 +30,36 @@ export async function POST(request: Request) {
       level,
       type,
       questions,
-      currentQuestionIndex,
       userAnswer,
       conversationHistory,
+      interviewState,
+      exchangeCount,
     } = body;
 
-    const totalQuestions = questions.length;
-    const isLastQuestion = currentQuestionIndex >= totalQuestions - 1;
-    const nextIndex = currentQuestionIndex + 1;
+    const seedQuestions = questions ?? [];
+    const maxExchanges = maxExchangesFor(seedQuestions.length);
+    // The candidate has just submitted an answer; that one is counted here.
+    const answersGiven = (exchangeCount ?? 0) + 1;
 
-    const historyText = conversationHistory
-      .map((m) => `${m.role === "user" ? "Candidate" : "Interviewer"}: ${m.content}`)
-      .join("\n");
-
-    let prompt: string;
-
-    if (isLastQuestion) {
-      prompt = `You are a professional interviewer conducting a ${level} ${type} interview for a ${role} position.
-
-Conversation so far:
-${historyText}
-Candidate: ${userAnswer}
-
-This was the final question. Acknowledge their answer briefly (1-2 sentences), then give a warm, professional closing — thank them for their time and let them know feedback will be provided shortly. Keep it natural and concise (3-4 sentences total). Do not use markdown or bullet points.`;
-    } else {
-      const nextQuestion = questions[nextIndex];
-      prompt = `You are a professional interviewer conducting a ${level} ${type} interview for a ${role} position.
-
-Conversation so far:
-${historyText}
-Candidate: ${userAnswer}
-
-Acknowledge their answer briefly (1 sentence), then smoothly transition to the next question. Ask this exact question: "${nextQuestion}"
-
-Keep it natural and conversational. Do not use markdown, bullet points, or numbering. Total response should be 2-3 sentences.`;
-    }
-
-    const { text } = await generateText({
-      model: google("gemini-2.5-flash"),
-      prompt,
+    const { turn, isFinished } = await runAdaptiveTurn({
+      role: role || "the role",
+      level: level || "the",
+      type: type || "Mixed",
+      seedQuestions,
+      conversationHistory: conversationHistory ?? [],
+      userAnswer,
+      currentState: interviewState ?? DEFAULT_INTERVIEW_STATE,
+      exchangeCount: answersGiven,
+      maxExchanges,
     });
 
     return Response.json({
       success: true,
-      aiResponse: text.trim(),
-      nextQuestionIndex: nextIndex,
-      isFinished: isLastQuestion,
+      aiResponse: turn.spokenResponse.trim(),
+      interviewState: turn.updatedState,
+      action: turn.action,
+      exchangeCount: answersGiven,
+      isFinished,
     });
   } catch (error) {
     console.error("Interview respond error:", error);

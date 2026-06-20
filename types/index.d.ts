@@ -151,6 +151,10 @@ interface AgentProps {
   feedbackId?: string;
   type: "generate" | "interview";
   questions?: string[];
+  // Phase 2: passed so the adaptive engine knows the real interview context.
+  role?: string;
+  level?: string;
+  interviewType?: string; // Technical | Behavioral | Mixed
 }
 
 interface RouteParams {
