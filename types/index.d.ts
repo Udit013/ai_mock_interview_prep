@@ -193,6 +193,7 @@ interface InterviewCardProps {
   techstack: string[];
   createdAt?: string;
   feedback?: Feedback | null;
+  visibility?: "public" | "private";
 }
 
 interface AgentProps {
