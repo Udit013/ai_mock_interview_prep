@@ -118,6 +118,104 @@ const Page = async ({ params }: RouteParams) => {
         </ul>
       </section>
 
+      {feedback.speakingAnalytics && (
+        <>
+          <hr className="border-dark-300" />
+          <section className="flex flex-col gap-4">
+            <h3>Speaking Analytics</h3>
+            <div className="flex flex-wrap gap-4">
+              {[
+                {
+                  label: "Speaking rate",
+                  value: `${feedback.speakingAnalytics.wordsPerMinute} wpm`,
+                },
+                {
+                  label: "Filler words",
+                  value: `${feedback.speakingAnalytics.fillerWordCount}`,
+                },
+                {
+                  label: "Words spoken",
+                  value: `${feedback.speakingAnalytics.totalWords}`,
+                },
+                {
+                  label: "Speaking time",
+                  value: `${feedback.speakingAnalytics.durationSeconds}s`,
+                },
+              ].map((stat) => (
+                <div
+                  key={stat.label}
+                  className="flex flex-col gap-1 rounded-lg border border-dark-300 bg-dark-200 px-5 py-3 min-w-[120px]"
+                >
+                  <span className="text-2xl font-bold text-primary-100">
+                    {stat.value}
+                  </span>
+                  <span className="text-xs text-light-400">{stat.label}</span>
+                </div>
+              ))}
+            </div>
+
+            {feedback.speakingAnalytics.insights.length > 0 && (
+              <ul className="flex flex-col gap-2">
+                {feedback.speakingAnalytics.insights.map((insight, i) => (
+                  <li key={i} className="flex flex-row gap-2 items-start">
+                    <span className="text-primary-100 mt-1">•</span>
+                    <p className="text-light-400">{insight}</p>
+                  </li>
+                ))}
+              </ul>
+            )}
+
+            {feedback.speakingAnalytics.fillerWordsUsed.length > 0 && (
+              <div className="flex flex-wrap gap-2">
+                {feedback.speakingAnalytics.fillerWordsUsed.map((f) => (
+                  <span
+                    key={f.word}
+                    className="rounded-full bg-dark-300 px-3 py-1 text-xs"
+                  >
+                    &ldquo;{f.word}&rdquo; ×{f.count}
+                  </span>
+                ))}
+              </div>
+            )}
+          </section>
+        </>
+      )}
+
+      {feedback.starCompleteness && (
+        <>
+          <hr className="border-dark-300" />
+          <section className="flex flex-col gap-4">
+            <h3>STAR Method Completeness</h3>
+            <div className="flex flex-wrap gap-3">
+              {(
+                [
+                  ["Situation", feedback.starCompleteness.situation],
+                  ["Task", feedback.starCompleteness.task],
+                  ["Action", feedback.starCompleteness.action],
+                  ["Result", feedback.starCompleteness.result],
+                ] as const
+              ).map(([label, present]) => (
+                <div
+                  key={label}
+                  className={cn(
+                    "flex items-center gap-2 rounded-lg px-4 py-2 border",
+                    present
+                      ? "border-success-100 text-success-100"
+                      : "border-dark-300 text-light-400"
+                  )}
+                >
+                  <span>{present ? "✓" : "—"}</span>
+                  <span className="text-sm">{label}</span>
+                </div>
+              ))}
+            </div>
+            <p className="text-light-400 text-sm">
+              {feedback.starCompleteness.note}
+            </p>
+          </section>
+        </>
+      )}
+
       <hr className="border-dark-300" />
 
       <section className="flex flex-col gap-4">

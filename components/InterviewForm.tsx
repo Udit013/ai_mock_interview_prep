@@ -35,6 +35,7 @@ interface ParsedResumeData {
 const InterviewForm = ({ userId }: { userId: string }) => {
   const router = useRouter();
   const [mode, setMode] = useState<Mode>("manual");
+  const [visibility, setVisibility] = useState<"public" | "private">("public");
   const [loading, setLoading] = useState(false);
   const [parsing, setParsing] = useState(false);
   const [resume, setResume] = useState<ParsedResumeData | null>(null);
@@ -99,6 +100,7 @@ const InterviewForm = ({ userId }: { userId: string }) => {
           ...values,
           userid: userId,
           source: mode,
+          visibility,
           resumeContext: mode === "resume" ? resume : undefined,
         }),
       });
@@ -137,7 +139,11 @@ const InterviewForm = ({ userId }: { userId: string }) => {
               role="tab"
               type="button"
               aria-selected={mode === m}
-              onClick={() => setMode(m)}
+              onClick={() => {
+                setMode(m);
+                // Résumé interviews are personal — default them to private.
+                setVisibility(m === "resume" ? "private" : "public");
+              }}
               className={cn(
                 "flex-1 rounded-md px-4 py-2 text-sm font-medium transition-colors",
                 mode === m
@@ -278,6 +284,33 @@ const InterviewForm = ({ userId }: { userId: string }) => {
                 <span>3</span>
                 <span>15</span>
               </div>
+            </div>
+
+            <div className="flex flex-col gap-2">
+              <label className="label">Visibility</label>
+              <div className="flex gap-2 rounded-lg bg-dark-200 p-1">
+                {(["public", "private"] as const).map((v) => (
+                  <button
+                    key={v}
+                    type="button"
+                    aria-pressed={visibility === v}
+                    onClick={() => setVisibility(v)}
+                    className={cn(
+                      "flex-1 rounded-md px-4 py-2 text-sm font-medium transition-colors capitalize",
+                      visibility === v
+                        ? "bg-primary-200 text-dark-100"
+                        : "text-light-400 hover:text-white"
+                    )}
+                  >
+                    {v}
+                  </button>
+                ))}
+              </div>
+              <p className="text-xs text-light-400">
+                {visibility === "private"
+                  ? "Only you can see this interview. Recommended for résumé-based interviews."
+                  : "Other users may see this interview in the community feed (no feedback is shared)."}
+              </p>
             </div>
 
             <Button

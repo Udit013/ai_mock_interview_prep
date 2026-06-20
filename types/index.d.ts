@@ -43,6 +43,25 @@ interface SpeechRecognition extends EventTarget {
 
 // ── App domain types ─────────────────────────────────────────────────────────
 
+// ── Phase 4: Speaking Analytics ───────────────────────────────────────────────
+
+interface SpeakingAnalytics {
+  fillerWordCount: number;
+  fillerWordsUsed: { word: string; count: number }[];
+  totalWords: number;
+  durationSeconds: number;
+  wordsPerMinute: number;
+  insights: string[];
+}
+
+interface StarCompleteness {
+  situation: boolean;
+  task: boolean;
+  action: boolean;
+  result: boolean;
+  note: string;
+}
+
 interface Feedback {
   id: string;
   interviewId: string;
@@ -56,6 +75,10 @@ interface Feedback {
   areasForImprovement: string[];
   finalAssessment: string;
   createdAt: string;
+  // Phase 4: optional, additive.
+  speakingAnalytics?: SpeakingAnalytics;
+  starCompleteness?: StarCompleteness;
+  userId?: string;
 }
 
 interface Interview {
@@ -70,6 +93,31 @@ interface Interview {
   finalized: boolean;
   // Phase 1: optional, additive — older docs without it still load.
   source?: "manual" | "resume";
+  // Privacy: "private" interviews are never shown in the community feed.
+  visibility?: "public" | "private";
+}
+
+// ── Phase 5: Progress Dashboard ───────────────────────────────────────────────
+
+interface CompetencyScore {
+  name: string;
+  score: number; // average 0-100
+}
+
+interface ScorePoint {
+  date: string; // ISO
+  score: number;
+}
+
+interface UserProgress {
+  totalInterviews: number;
+  averageScore: number;
+  currentStreak: number;
+  scoreTrend: ScorePoint[];
+  competencies: CompetencyScore[];
+  strongest: CompetencyScore | null;
+  weakest: CompetencyScore | null;
+  recentImprovement: number | null; // delta vs earlier average
 }
 
 // ── Phase 1: Resume-Aware Interviews ──────────────────────────────────────────
@@ -127,6 +175,8 @@ interface CreateFeedbackParams {
   userId: string;
   transcript: { role: string; content: string }[];
   feedbackId?: string;
+  // Phase 4: deterministic browser-computed speaking metrics.
+  speakingAnalytics?: SpeakingAnalytics;
 }
 
 interface User {
@@ -142,6 +192,7 @@ interface InterviewCardProps {
   type: string;
   techstack: string[];
   createdAt?: string;
+  feedback?: Feedback | null;
 }
 
 interface AgentProps {

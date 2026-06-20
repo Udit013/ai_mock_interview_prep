@@ -17,6 +17,7 @@ interface GenerateBody {
   userid: string;
   source?: "manual" | "resume";
   resumeContext?: ResumeSchema;
+  visibility?: "public" | "private";
 }
 
 /**
@@ -55,8 +56,17 @@ ${experiences || "(none listed)"}`;
 
 export async function POST(request: Request) {
   const body: GenerateBody = await request.json();
-  const { type, role, level, techstack, amount, userid, source, resumeContext } =
-    body;
+  const {
+    type,
+    role,
+    level,
+    techstack,
+    amount,
+    userid,
+    source,
+    resumeContext,
+    visibility,
+  } = body;
 
   try {
     const isResume = source === "resume" && resumeContext;
@@ -117,6 +127,11 @@ Return ONLY a JSON array of strings, like:
         ? resumeContext.technologies.slice(0, 8)
         : [];
 
+    // Résumé interviews default to private (they reference personal experience);
+    // manual interviews default to public unless the user chose otherwise.
+    const resolvedVisibility =
+      visibility ?? (source === "resume" ? "private" : "public");
+
     const interview = {
       role,
       type,
@@ -126,6 +141,7 @@ Return ONLY a JSON array of strings, like:
       userId: userid,
       finalized: true,
       source: source ?? "manual",
+      visibility: resolvedVisibility,
       coverImage: getRandomInterviewCover(),
       createdAt: new Date().toISOString(),
     };
