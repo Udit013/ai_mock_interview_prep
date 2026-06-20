@@ -7,6 +7,16 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { createFeedback } from "@/lib/actions/interview.action";
 
+// Local copy so this client component never imports server-only AI libs.
+const DEFAULT_INTERVIEW_STATE: InterviewState = {
+  strengths: [],
+  weaknesses: [],
+  topicsCovered: [],
+  estimatedConfidence: 50,
+  difficulty: "medium",
+  followUpOpportunities: [],
+};
+
 enum CallStatus {
   INACTIVE = "INACTIVE",
   CONNECTING = "CONNECTING",
@@ -35,6 +45,9 @@ const Agent = ({
   feedbackId,
   type,
   questions = [],
+  role,
+  level,
+  interviewType,
 }: AgentProps) => {
   const router = useRouter();
   const [callStatus, setCallStatus] = useState<CallStatus>(CallStatus.INACTIVE);
@@ -47,7 +60,9 @@ const Agent = ({
 
   // Refs so callbacks always see latest values without re-registering
   const messagesRef = useRef<SavedMessage[]>([]);
-  const questionIndexRef = useRef(0);
+  // Phase 2: adaptive engine state, carried across turns.
+  const interviewStateRef = useRef<InterviewState>(DEFAULT_INTERVIEW_STATE);
+  const exchangeCountRef = useRef(0);
   const recognitionRef = useRef<InstanceType<SpeechRecognitionCtor> | null>(null);
   const synthRef = useRef<SpeechSynthesisUtterance | null>(null);
   const statusRef = useRef<CallStatus>(CallStatus.INACTIVE);
@@ -174,13 +189,14 @@ const Agent = ({
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            role: "the position",
-            level: "the level",
-            type: "interview",
+            role: role ?? "the role",
+            level: level ?? "",
+            type: interviewType ?? "Mixed",
             questions,
-            currentQuestionIndex: questionIndexRef.current,
             userAnswer,
             conversationHistory: messagesRef.current,
+            interviewState: interviewStateRef.current,
+            exchangeCount: exchangeCountRef.current,
           }),
         });
 
@@ -195,13 +211,18 @@ const Agent = ({
         setMessages((prev) => [...prev, aiMsg]);
         messagesRef.current = [...messagesRef.current, aiMsg];
 
+        // Carry the adaptive engine's updated assessment into the next turn.
+        if (data.interviewState) interviewStateRef.current = data.interviewState;
+        if (typeof data.exchangeCount === "number") {
+          exchangeCountRef.current = data.exchangeCount;
+        }
+
         setIsProcessing(false);
         await speakText(data.aiResponse);
 
         if (data.isFinished) {
           setCallStatus(CallStatus.FINISHED);
         } else {
-          questionIndexRef.current = data.nextQuestionIndex;
           startListening(handleUserAnswer);
         }
       } catch {
@@ -209,7 +230,7 @@ const Agent = ({
         toast.error("Connection error. Please check your internet.");
       }
     },
-    [questions, speakText, startListening]
+    [questions, role, level, interviewType, speakText, startListening]
   );
 
   // ── Finish: generate feedback and redirect ──────────────────────────────────
@@ -249,7 +270,8 @@ const Agent = ({
 
     setCallStatus(CallStatus.CONNECTING);
     messagesRef.current = [];
-    questionIndexRef.current = 0;
+    interviewStateRef.current = DEFAULT_INTERVIEW_STATE;
+    exchangeCountRef.current = 0;
     setMessages([]);
 
     // Speak the opening + first question

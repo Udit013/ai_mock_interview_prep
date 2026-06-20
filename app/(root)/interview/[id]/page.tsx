@@ -55,6 +55,9 @@ const Page = async ({ params }: RouteParams) => {
         feedbackId={feedback?.id}
         type="interview"
         questions={interview.questions}
+        role={interview.role}
+        level={interview.level}
+        interviewType={interview.type}
       />
     </>
   );
