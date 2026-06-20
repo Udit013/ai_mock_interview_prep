@@ -68,6 +68,58 @@ interface Interview {
   userId: string;
   type: string;
   finalized: boolean;
+  // Phase 1: optional, additive — older docs without it still load.
+  source?: "manual" | "resume";
+}
+
+// ── Phase 1: Resume-Aware Interviews ──────────────────────────────────────────
+
+interface ResumeProject {
+  name: string;
+  description: string;
+  technologies: string[];
+}
+
+interface ResumeExperience {
+  company: string;
+  role: string;
+  highlights: string[];
+}
+
+interface ParsedResume {
+  summary: string;
+  skills: string[];
+  projects: ResumeProject[];
+  experiences: ResumeExperience[];
+  technologies: string[];
+}
+
+interface Resume extends ParsedResume {
+  id: string;
+  userId: string;
+  rawTextLength: number;
+  createdAt: string;
+}
+
+// ── Phase 2: Adaptive Interview Engine ────────────────────────────────────────
+
+type InterviewDifficulty = "easy" | "medium" | "hard";
+
+type AdaptiveAction =
+  | "follow_up"
+  | "increase_difficulty"
+  | "probe_basics"
+  | "clarify"
+  | "next_topic"
+  | "finish";
+
+interface InterviewState {
+  strengths: string[];
+  weaknesses: string[];
+  topicsCovered: string[];
+  estimatedConfidence: number; // 0-100
+  difficulty: InterviewDifficulty;
+  followUpOpportunities: string[];
 }
 
 interface CreateFeedbackParams {
