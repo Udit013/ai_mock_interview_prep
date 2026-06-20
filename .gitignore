@@ -2,3 +2,7 @@ node_modules/
 .claude/
 .next/
 tsconfig.tsbuildinfo
+.vercel
+
+# Local secrets
+.env*.local
