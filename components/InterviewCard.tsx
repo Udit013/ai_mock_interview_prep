@@ -1,13 +1,14 @@
 import dayjs from 'dayjs';
 import Image from "next/image";
-import {getRandomInterviewCover} from "@/lib/utils";
+import {getRandomInterviewCover, cn} from "@/lib/utils";
 import {Button} from "@/components/ui/button";
 import Link from "next/link";
 import DisplayTechIcons from "@/components/DisplayTechIcons";
 
-const InterviewCard = ({ interviewId, userId, role, type, techstack, createdAt, feedback = null }: InterviewCardProps) => {
+const InterviewCard = ({ interviewId, userId, role, type, techstack, createdAt, feedback = null, visibility }: InterviewCardProps) => {
     const normalizedType = /mix/gi.test(type) ? 'Mixed' : type;
     const formattedDate = dayjs(feedback?.createdAt || createdAt || Date.now()).format('MMM D, YYYY');
+    const isPrivate = visibility === 'private';
 
     return (
         <div className="card-border w-[360px] max-sm:w-full min-h-96">
@@ -18,6 +19,19 @@ const InterviewCard = ({ interviewId, userId, role, type, techstack, createdAt, 
                   </div>
 
                   <Image src={getRandomInterviewCover()} alt="cover image" width={90} height={90} className="rounded-full object-fit size-[90px]" />
+
+                  {visibility && (
+                      <span
+                          className={cn(
+                              "mt-3 inline-flex w-fit items-center gap-1 rounded-full px-3 py-1 text-xs font-medium",
+                              isPrivate
+                                  ? "bg-dark-300 text-light-400"
+                                  : "bg-success-100/20 text-success-100"
+                          )}
+                      >
+                          {isPrivate ? "🔒 Private" : "🌐 Public"}
+                      </span>
+                  )}
 
                   <h3 className="mt-5 capitalize">
                       {role} Interview

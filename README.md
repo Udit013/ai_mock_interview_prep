@@ -1,21 +1,38 @@
-# PrepWise — AI Mock Interview Platform
+# PrepWise — AI Interview Intelligence Platform
 
-A full-stack AI-powered interview preparation platform that conducts real voice interviews, evaluates your performance with AI, and delivers structured feedback — entirely free, with no paid API dependencies.
+A full-stack, AI-powered interview platform that conducts **adaptive voice interviews**, generates questions from your **résumé**, analyzes your **speaking delivery**, and tracks your **progress over time** — entirely free, with no paid API dependencies.
 
 ## Live Demo
 
 **[https://mock-ai-prep.vercel.app](https://mock-ai-prep.vercel.app)**
 
+> Voice interviews require Chrome or Edge (Web Speech API).
+
 ---
 
 ## Features
 
-- **Voice Interview** — Browser-native speech recognition (Web Speech API) captures your answers; text-to-speech delivers AI questions aloud, creating a realistic interview experience with zero cost
-- **AI Question Generation** — Gemini 2.0 Flash generates role-specific, leveled questions tailored to your tech stack and interview type (Technical / Behavioral / Mixed)
-- **Conversational AI Interviewer** — After each answer, Gemini acknowledges your response, provides brief encouragement, and advances to the next question naturally
-- **Detailed Feedback Report** — Scored across 5 dimensions (Communication, Technical Knowledge, Problem Solving, Cultural Fit, Confidence) with strengths, areas for improvement, and an overall assessment
-- **Interview Dashboard** — View your past interviews and browse community interviews
-- **Authentication** — Firebase Auth with email/password, session cookies, and protected routes
+### Core
+- **Adaptive Voice Interview** — Browser-native speech recognition captures your answers and text-to-speech asks questions aloud. The interviewer **adapts in real time**: strong answers raise difficulty, weak answers trigger follow-ups, missing fundamentals get probed, and unclear answers get clarifying questions.
+- **AI Question Generation** — Gemini generates role-specific, leveled questions tailored to your tech stack and interview type (Technical / Behavioral / Mixed).
+- **AI Feedback Report** — Scored across 5 dimensions (Communication, Technical Knowledge, Problem Solving, Cultural Fit, Confidence) with strengths, areas for improvement, STAR-method completeness, and an overall assessment — all Zod-validated.
+
+### Résumé-Aware Interviews
+- Upload a **PDF résumé**; text is extracted with `unpdf` (serverless, no native deps) and structured by Gemini into skills, projects, experiences, and technologies.
+- Questions reference your **actual experience** — e.g. *"Why did you choose DeBERTa over BERT in your Aphasia Detection project?"* or *"Walk me through the deployment architecture of RxFlow."*
+
+### Speaking Analytics (no external speech APIs)
+- Deterministic, browser-computed metrics: **filler-word count**, **words per minute**, **speaking duration**, total words, plus actionable coaching insights.
+- **STAR-method completeness** for behavioral answers (Situation / Task / Action / Result), judged by the feedback model.
+
+### Progress Dashboard
+- Personal coaching hub: interviews completed, **day streak**, average score, **score trend** (SVG line chart), per-competency averages (bars), strongest/weakest competencies, and recent improvement — all dependency-free.
+
+### Privacy
+- Every interview is **public or private**. Résumé interviews default to **private** and never appear in the community feed. A visibility badge (🔒 Private / 🌐 Public) is shown on each interview card.
+
+### Auth
+- Firebase Auth with email/password, server-side session cookies, and protected routes.
 
 ---
 
@@ -23,16 +40,21 @@ A full-stack AI-powered interview preparation platform that conducts real voice 
 
 | Layer | Technology |
 |---|---|
-| Framework | Next.js 15 (App Router, React Server Components) |
-| Language | TypeScript |
+| Framework | Next.js 15 (App Router, React Server Components, Server Actions) |
+| Language | TypeScript (strict) |
 | Styling | Tailwind CSS |
 | Auth & Database | Firebase (Auth + Firestore) |
-| AI — Questions & Feedback | Google Gemini 2.0 Flash (`@ai-sdk/google`) |
-| AI — Voice I/O | Web Speech API (SpeechRecognition + SpeechSynthesis) |
-| Forms | react-hook-form + Zod |
+| AI | Google **Gemini 2.5 Flash** (`@ai-sdk/google`, Vercel AI SDK) |
+| Voice I/O | Web Speech API (SpeechRecognition + SpeechSynthesis) |
+| PDF parsing | `unpdf` |
+| Validation | Zod (all AI outputs) |
+| Forms | react-hook-form |
+| Charts | Hand-built SVG (no chart library) |
 | Deployment | Vercel |
 
 **Cost: $0** — Gemini free tier + Firebase Spark plan + browser-native voice APIs.
+
+> **Model note:** the code uses `gemini-2.5-flash`. Newer Google AI Studio keys have **zero free-tier quota for `gemini-2.0-flash`**, so 2.5 Flash is both the working and the more capable choice.
 
 ---
 
@@ -40,53 +62,64 @@ A full-stack AI-powered interview preparation platform that conducts real voice 
 
 ```
 app/
-├── (auth)/          # Sign-in / Sign-up pages
+├── (auth)/                       # Sign-in / Sign-up
 ├── (root)/
-│   ├── page.tsx     # Dashboard (user + community interviews)
+│   ├── page.tsx                  # Dashboard: progress hub + interviews
 │   ├── interview/
-│   │   ├── page.tsx          # Create interview form
-│   │   ├── [id]/page.tsx     # Conduct interview (voice Agent)
-│   │   └── [id]/feedback/    # AI-scored feedback report
-│   └── layout.tsx   # Nav + auth guard
+│   │   ├── page.tsx              # Create interview (manual or résumé)
+│   │   ├── [id]/page.tsx         # Conduct adaptive voice interview
+│   │   └── [id]/feedback/        # Feedback + speaking analytics + STAR
+│   └── layout.tsx                # Nav + auth guard
 └── api/
-    ├── vapi/generate/         # POST — Gemini generates questions
-    └── interview/respond/     # POST — Gemini responds mid-interview
+    ├── vapi/generate/            # POST — generate questions (manual/résumé)
+    ├── interview/respond/        # POST — adaptive interview turn
+    └── resume/parse/             # POST — PDF → structured résumé
 
 components/
-├── Agent.tsx          # Voice interview engine (Web Speech API + Gemini)
-├── InterviewForm.tsx  # Interview creation form
-├── InterviewCard.tsx  # Dashboard interview cards
-└── AuthForm.tsx       # Sign-in / Sign-up form
+├── Agent.tsx                     # Voice engine (Web Speech API) + adaptive loop
+├── InterviewForm.tsx             # Manual / résumé modes + visibility toggle
+├── InterviewCard.tsx             # Cards with score + visibility badge
+└── dashboard/ProgressOverview.tsx# SVG stat cards / trend / competency bars
 
 lib/
+├── ai/
+│   ├── resume.ts                 # résumé Zod schema + Gemini structuring
+│   └── adaptive.ts               # interview state + adaptive turn engine
+├── analytics/speaking.ts         # deterministic speaking metrics
 ├── actions/
-│   ├── interview.action.ts  # Firestore CRUD + Gemini feedback
-│   └── auth.action.ts       # Session management
-└── buffer-shim.js   # Node 22+ compatibility (replaces SlowBuffer)
+│   ├── interview.action.ts       # Firestore CRUD + Gemini feedback
+│   ├── analytics.action.ts       # progress aggregation
+│   ├── resume.action.ts          # résumé persistence
+│   └── auth.action.ts            # session management
+└── buffer-shim.js                # Node 22+ compatibility (replaces SlowBuffer)
 ```
+
+### Firestore collections
+- `users/{uid}` — profile
+- `interviews/{id}` — `{ role, level, type, questions, techstack, userId, finalized, source, visibility, createdAt }`
+- `resumes/{uid}` — latest structured résumé per user
+- `feedback/{id}` — scores, strengths, STAR completeness, speaking analytics
 
 ---
 
-## How the Voice Interview Works
+## How the Adaptive Interview Works
 
-1. **Start** — Agent speaks the opening and first question using `SpeechSynthesis`
-2. **Listen** — `SpeechRecognition` captures the candidate's answer in real time (interim results shown as live transcript)
-3. **Process** — Answer is sent to `/api/interview/respond`; Gemini acknowledges and asks the next question
-4. **Repeat** — Loop continues until all questions are answered
-5. **Finish** — `createFeedback` sends the full transcript to Gemini; structured feedback (Zod-validated) is saved to Firestore; user is redirected to the feedback page
+1. **Start** — the Agent speaks an opening and the first seed question via `SpeechSynthesis`.
+2. **Listen** — `SpeechRecognition` captures the answer (with live interim transcript) and times its duration.
+3. **Adapt** — the answer is sent to `/api/interview/respond`, which runs one Zod-validated Gemini call that evaluates depth, updates a running `InterviewState` (strengths, weaknesses, topics, confidence, difficulty), and picks the next action: `follow_up | increase_difficulty | probe_basics | clarify | next_topic | finish`.
+4. **Terminate** — a deterministic exchange cap (`min(seedQuestions + 4, 12)`) guarantees the interview always ends, regardless of model output.
+5. **Finish** — the browser computes speaking analytics; `createFeedback` sends the transcript to Gemini for scoring + STAR analysis and stores everything in Firestore; the user is redirected to the feedback page.
 
 ---
 
 ## Local Setup
 
 ### Prerequisites
-
 - Node.js 18+
-- Firebase project (Firestore + Auth enabled)
-- Google AI Studio API key (Gemini)
+- A Firebase project (Firestore + Auth enabled)
+- A Google AI Studio API key — [aistudio.google.com/apikey](https://aistudio.google.com/apikey) (free)
 
 ### Installation
-
 ```bash
 git clone https://github.com/Udit013/ai_mock_interview_prep.git
 cd ai_mock_interview_prep
@@ -94,55 +127,51 @@ npm install
 ```
 
 ### Environment Variables
-
-Create a `.env.local` file:
+Create `.env.local` with the four server-side variables (the Firebase **client** config is set in `firebase/client.ts`):
 
 ```env
 FIREBASE_PROJECT_ID=your-project-id
 FIREBASE_CLIENT_EMAIL=firebase-adminsdk-xxx@your-project.iam.gserviceaccount.com
 FIREBASE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n"
-
-NEXT_PUBLIC_FIREBASE_API_KEY=AIza...
-NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=your-project.firebaseapp.com
-NEXT_PUBLIC_FIREBASE_PROJECT_ID=your-project-id
-NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=your-project.appspot.com
-NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=...
-NEXT_PUBLIC_FIREBASE_APP_ID=...
-
-GOOGLE_GENERATIVE_AI_API_KEY=AIza...
+GOOGLE_GENERATIVE_AI_API_KEY=your-gemini-key
 ```
 
-> Voice interviews use the browser-native Web Speech API — no additional API keys needed.
+> `.env.local` is gitignored. Voice and PDF parsing need no extra keys.
 
 ### Run
-
 ```bash
 npm run dev   # http://localhost:3000
 ```
 
-> Voice interview requires Chrome or Edge (Web Speech API).
-
 ---
 
 ## Deployment (Vercel)
-
-1. Push to GitHub
-2. Import the repo in [Vercel](https://vercel.com/new)
-3. Add all environment variables from `.env.local`
-4. Deploy
-
-Vercel auto-deploys on every push to `main`.
+1. Import the repo at [vercel.com/new](https://vercel.com/new).
+2. Add the four environment variables above (Production, Preview, Development).
+3. Deploy. Vercel auto-deploys on every push to `main`.
 
 ---
 
 ## Key Engineering Decisions
+- **Adaptive engine** — interview flow is server-driven via a single Zod-validated Gemini call per turn; seed questions form the backbone while difficulty and follow-ups adapt around them. Termination is enforced deterministically, never left to the model.
+- **No server-only code in the client** — `Agent.tsx` keeps a local `InterviewState` default and imports only pure helpers, so AI SDK packages never enter the client bundle.
+- **Deterministic analytics** — filler words / WPM / duration are computed in the browser (word-boundary safe), keeping coaching metrics free and explainable; only STAR judgment uses the model.
+- **Dependency-free charts** — the progress dashboard uses hand-built SVG, adding zero client JS.
+- **Privacy by default for résumé interviews** — `visibility` filtering keeps personal interviews out of the community feed; older docs without the field remain public for backward compatibility.
+- **Index-free Firestore queries** — single-field `where` filters with client-side sort/filter avoid composite-index requirements.
+- **Node 22+ compatibility** — `buffer-equal-constant-time` references `SlowBuffer` (removed in Node 22); resolved via a webpack + Turbopack alias to `lib/buffer-shim.js`.
 
-- **Firestore queries use single-field filters** to avoid composite index requirements; sorting and filtering happen client-side
-- **Node 22+ compatibility** — `buffer-equal-constant-time` depends on `SlowBuffer` (removed in Node 22); solved with a webpack + Turbopack module alias pointing to a custom shim (`lib/buffer-shim.js`)
-- **Web Speech API over paid STT/TTS** — Eliminates Vapi, ElevenLabs, and Deepgram costs entirely while keeping the interview experience natural
+---
+
+## Migration Notes
+All schema changes are **additive and backward-compatible**:
+- `Interview.source` and `Interview.visibility` are optional; existing docs without them load fine (treated as public, manual).
+- `Feedback.speakingAnalytics` and `Feedback.starCompleteness` are optional; older feedback renders without those sections.
+- New collection `resumes/{uid}` is created on first résumé upload.
+
+No environment variables were added.
 
 ---
 
 ## Screenshots
-
 Visit the live app at **[https://mock-ai-prep.vercel.app](https://mock-ai-prep.vercel.app)** to see it in action.

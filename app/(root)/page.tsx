@@ -75,6 +75,7 @@ const Page = async () => {
                 techstack={interview.techstack}
                 createdAt={interview.createdAt}
                 feedback={feedbackByInterview.get(interview.id) ?? null}
+                visibility={interview.visibility ?? "public"}
               />
             ))
           ) : (
