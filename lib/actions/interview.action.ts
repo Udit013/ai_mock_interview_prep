@@ -30,6 +30,9 @@ export async function getLatestInterviews({
     return snapshot.docs
       .map((doc) => ({ id: doc.id, ...doc.data() }) as Interview)
       .filter((i) => i.userId !== userId)
+      // Privacy: never surface another user's private interviews (e.g. résumé
+      // interviews). Older docs have no `visibility` field and stay public.
+      .filter((i) => i.visibility !== "private")
       .sort(
         (a, b) =>
           new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
@@ -61,6 +64,24 @@ export async function getInterviewsByUserId(userId: string): Promise<Interview[]
   }
 }
 
+export async function getFeedbackByUserId(
+  userId: string
+): Promise<Feedback[]> {
+  try {
+    const snapshot = await db
+      .collection("feedback")
+      .where("userId", "==", userId)
+      .get();
+
+    return snapshot.docs.map(
+      (doc) => ({ id: doc.id, ...doc.data() }) as Feedback
+    );
+  } catch (e) {
+    console.error("getFeedbackByUserId error:", e);
+    return [];
+  }
+}
+
 export async function getFeedbackByInterviewId({
   interviewId,
   userId,
@@ -88,6 +109,7 @@ export async function createFeedback({
   userId,
   transcript,
   feedbackId,
+  speakingAnalytics,
 }: CreateFeedbackParams): Promise<{ success: boolean; feedbackId?: string }> {
   try {
     const formattedTranscript = transcript
@@ -115,6 +137,10 @@ Return:
 - strengths: 3-5 specific things the candidate did well
 - areasForImprovement: 3-5 specific things to work on
 - finalAssessment: 2-3 sentence overall summary with actionable advice
+- starCompleteness: for behavioural answers, whether the candidate covered each
+  part of the STAR method (Situation, Task, Action, Result). If the interview
+  was purely technical with no behavioural answers, set all four to false and
+  say so in the note.
 
 Be specific and constructive. Reference actual moments from the transcript when possible.`,
     });
@@ -127,6 +153,8 @@ Be specific and constructive. Reference actual moments from the transcript when 
       interviewId,
       userId,
       ...feedbackData,
+      // Phase 4: persist deterministic speaking metrics alongside the AI feedback.
+      ...(speakingAnalytics ? { speakingAnalytics } : {}),
       createdAt: new Date().toISOString(),
     });
 

@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { createFeedback } from "@/lib/actions/interview.action";
+import { analyzeSpeaking } from "@/lib/analytics/speaking";
 
 // Local copy so this client component never imports server-only AI libs.
 const DEFAULT_INTERVIEW_STATE: InterviewState = {
@@ -63,6 +64,9 @@ const Agent = ({
   // Phase 2: adaptive engine state, carried across turns.
   const interviewStateRef = useRef<InterviewState>(DEFAULT_INTERVIEW_STATE);
   const exchangeCountRef = useRef(0);
+  // Phase 4: per-answer speaking durations (seconds) for analytics.
+  const answerStartRef = useRef(0);
+  const answerDurationsRef = useRef<number[]>([]);
   const recognitionRef = useRef<InstanceType<SpeechRecognitionCtor> | null>(null);
   const synthRef = useRef<SpeechSynthesisUtterance | null>(null);
   const statusRef = useRef<CallStatus>(CallStatus.INACTIVE);
@@ -145,6 +149,11 @@ const Agent = ({
       recognition.continuous = false;
       recognition.interimResults = true;
 
+      recognition.onstart = () => {
+        answerStartRef.current = Date.now();
+        setIsListening(true);
+      };
+
       recognition.onresult = (event: SpeechRecognitionEvent) => {
         const interim = Array.from(event.results)
           .map((r: SpeechRecognitionResult) => r[0].transcript)
@@ -153,6 +162,11 @@ const Agent = ({
 
         if (event.results[event.results.length - 1].isFinal) {
           setInterimTranscript("");
+          // Record how long this answer took, for speaking analytics.
+          const seconds = (Date.now() - answerStartRef.current) / 1000;
+          if (seconds > 0 && seconds < 600) {
+            answerDurationsRef.current.push(seconds);
+          }
           onResult(interim.trim());
         }
       };
@@ -242,11 +256,21 @@ const Agent = ({
     }
 
     const finish = async () => {
+      // Phase 4: compute speaking analytics from the candidate's spoken turns.
+      const candidateTurns = messagesRef.current
+        .filter((m) => m.role === "user")
+        .map((m) => m.content);
+      const speakingAnalytics = analyzeSpeaking(
+        candidateTurns,
+        answerDurationsRef.current
+      );
+
       const { success, feedbackId: newFeedbackId } = await createFeedback({
         interviewId: interviewId!,
         userId: userId!,
         transcript: messagesRef.current,
         feedbackId,
+        speakingAnalytics,
       });
 
       if (success && newFeedbackId) {
@@ -272,6 +296,7 @@ const Agent = ({
     messagesRef.current = [];
     interviewStateRef.current = DEFAULT_INTERVIEW_STATE;
     exchangeCountRef.current = 0;
+    answerDurationsRef.current = [];
     setMessages([]);
 
     // Speak the opening + first question

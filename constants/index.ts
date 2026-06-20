@@ -148,6 +148,18 @@ export const feedbackSchema = z.object({
   strengths: z.array(z.string()),
   areasForImprovement: z.array(z.string()),
   finalAssessment: z.string(),
+  // Phase 4: STAR-method completeness across behavioural answers.
+  starCompleteness: z.object({
+    situation: z.boolean(),
+    task: z.boolean(),
+    action: z.boolean(),
+    result: z.boolean(),
+    note: z
+      .string()
+      .describe(
+        "One sentence on how well the candidate used the STAR structure. If the interview was purely technical with no behavioural answers, say so."
+      ),
+  }),
 });
 
 // Voice interviews now use Web Speech API (browser-native, free).

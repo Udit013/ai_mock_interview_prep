@@ -3,19 +3,31 @@ import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import Image from "next/image";
 import InterviewCard from "@/components/InterviewCard";
+import ProgressOverview from "@/components/dashboard/ProgressOverview";
 import { getCurrentUser } from "@/lib/actions/auth.action";
 import {
   getInterviewsByUserId,
   getLatestInterviews,
+  getFeedbackByUserId,
 } from "@/lib/actions/interview.action";
+import { getUserProgress } from "@/lib/actions/analytics.action";
 
 const Page = async () => {
   const user = await getCurrentUser();
 
-  const [userInterviews, latestInterviews] = await Promise.all([
-    getInterviewsByUserId(user?.id ?? ""),
-    getLatestInterviews({ userId: user?.id ?? "", limit: 20 }),
-  ]);
+  const [userInterviews, latestInterviews, userFeedback, progress] =
+    await Promise.all([
+      getInterviewsByUserId(user?.id ?? ""),
+      getLatestInterviews({ userId: user?.id ?? "", limit: 20 }),
+      getFeedbackByUserId(user?.id ?? ""),
+      getUserProgress(user?.id ?? ""),
+    ]);
+
+  // Map each of the user's interviews to its feedback (fixes cards always
+  // showing "not taken yet").
+  const feedbackByInterview = new Map(
+    userFeedback.map((f) => [f.interviewId, f])
+  );
 
   const hasUserInterviews = userInterviews.length > 0;
   const hasLatestInterviews = latestInterviews.length > 0;
@@ -42,6 +54,12 @@ const Page = async () => {
         />
       </section>
 
+      {progress.totalInterviews > 0 && (
+        <div className="mt-8">
+          <ProgressOverview progress={progress} />
+        </div>
+      )}
+
       <section className="flex flex-col gap-6 mt-8">
         <h2>Your Interviews</h2>
 
@@ -56,6 +74,7 @@ const Page = async () => {
                 type={interview.type}
                 techstack={interview.techstack}
                 createdAt={interview.createdAt}
+                feedback={feedbackByInterview.get(interview.id) ?? null}
               />
             ))
           ) : (
