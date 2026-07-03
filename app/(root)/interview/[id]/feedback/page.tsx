@@ -23,6 +23,10 @@ const Page = async ({ params }: RouteParams) => {
   ]);
 
   if (!interview) redirect("/");
+  // Private interviews are owner-only, including their feedback pages.
+  if (interview.visibility === "private" && interview.userId !== user.id) {
+    redirect("/");
+  }
   if (!feedback) redirect(`/interview/${id}`);
 
   const formattedDate = dayjs(feedback.createdAt).format("MMMM D, YYYY [at] h:mm A");

@@ -1,24 +1,26 @@
 import { generateText } from "ai";
 import { google } from "@ai-sdk/google";
+import { z } from "zod";
 import { getRandomInterviewCover } from "@/lib/utils";
 import { db } from "@/firebase/admin";
-import type { ResumeSchema } from "@/lib/ai/resume";
+import { getCurrentUser } from "@/lib/actions/auth.action";
+import { resumeSchema, type ResumeSchema } from "@/lib/ai/resume";
 
 export async function GET() {
   return Response.json({ success: true, data: "THANK YOU!" }, { status: 200 });
 }
 
-interface GenerateBody {
-  type: string;
-  role: string;
-  level: string;
-  techstack: string;
-  amount: number;
-  userid: string;
-  source?: "manual" | "resume";
-  resumeContext?: ResumeSchema;
-  visibility?: "public" | "private";
-}
+// Identity comes from the session cookie, never from the request body.
+const generateBodySchema = z.object({
+  type: z.enum(["Technical", "Behavioral", "Mixed"]),
+  role: z.string().min(2).max(100),
+  level: z.enum(["Junior", "Mid", "Senior"]),
+  techstack: z.string().max(300).optional().default(""),
+  amount: z.coerce.number().int().min(3).max(15),
+  source: z.enum(["manual", "resume"]).optional(),
+  resumeContext: resumeSchema.optional(),
+  visibility: z.enum(["public", "private"]).optional(),
+});
 
 /**
  * Condense a parsed resume into a compact, prompt-friendly block so generated
@@ -55,20 +57,26 @@ ${experiences || "(none listed)"}`;
 }
 
 export async function POST(request: Request) {
-  const body: GenerateBody = await request.json();
-  const {
-    type,
-    role,
-    level,
-    techstack,
-    amount,
-    userid,
-    source,
-    resumeContext,
-    visibility,
-  } = body;
-
   try {
+    // Auth: derive identity from the session; reject anonymous callers so the
+    // Gemini quota can't be burned and interviews can't be forged for others.
+    const user = await getCurrentUser();
+    if (!user) {
+      return Response.json(
+        { success: false, error: "You must be signed in." },
+        { status: 401 }
+      );
+    }
+
+    const parsedBody = generateBodySchema.safeParse(await request.json());
+    if (!parsedBody.success) {
+      return Response.json(
+        { success: false, error: "Invalid request." },
+        { status: 400 }
+      );
+    }
+    const { type, role, level, techstack, amount, source, resumeContext, visibility } =
+      parsedBody.data;
     const isResume = source === "resume" && resumeContext;
 
     const prompt = isResume
@@ -138,7 +146,7 @@ Return ONLY a JSON array of strings, like:
       level,
       techstack: techstackList,
       questions: parsedQuestions,
-      userId: userid,
+      userId: user.id,
       finalized: true,
       source: source ?? "manual",
       visibility: resolvedVisibility,

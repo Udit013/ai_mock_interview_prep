@@ -32,7 +32,8 @@ interface ParsedResumeData {
   technologies: string[];
 }
 
-const InterviewForm = ({ userId }: { userId: string }) => {
+// Identity is derived server-side from the session cookie; no userId prop needed.
+const InterviewForm = () => {
   const router = useRouter();
   const [mode, setMode] = useState<Mode>("manual");
   const [visibility, setVisibility] = useState<"public" | "private">("public");
@@ -98,7 +99,6 @@ const InterviewForm = ({ userId }: { userId: string }) => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           ...values,
-          userid: userId,
           source: mode,
           visibility,
           resumeContext: mode === "resume" ? resume : undefined,
