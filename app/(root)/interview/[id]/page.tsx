@@ -19,6 +19,11 @@ const Page = async ({ params }: RouteParams) => {
 
   if (!user) redirect("/sign-in");
   if (!interview) redirect("/");
+  // Private interviews are owner-only — visibility must hold for direct URLs
+  // too, not just the community feed.
+  if (interview.visibility === "private" && interview.userId !== user.id) {
+    redirect("/");
+  }
 
   const feedback = await getFeedbackByInterviewId({
     interviewId: id,

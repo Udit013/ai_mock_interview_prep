@@ -10,7 +10,7 @@ const Page = async () => {
   return (
     <>
       <h3>Create a New Interview</h3>
-      <InterviewForm userId={user.id} />
+      <InterviewForm />
     </>
   );
 };

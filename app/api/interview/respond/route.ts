@@ -1,30 +1,51 @@
+import { z } from "zod";
 import {
   runAdaptiveTurn,
   maxExchangesFor,
   DEFAULT_INTERVIEW_STATE,
-  type InterviewStateSchema,
+  interviewStateSchema,
 } from "@/lib/ai/adaptive";
+import { getCurrentUser } from "@/lib/actions/auth.action";
 
-interface ConversationMessage {
-  role: "user" | "assistant" | "system";
-  content: string;
-}
-
-interface RequestBody {
-  role: string;
-  level: string;
-  type: string;
-  questions: string[];
-  userAnswer: string;
-  conversationHistory: ConversationMessage[];
-  // Adaptive engine state (optional for backwards compatibility).
-  interviewState?: InterviewStateSchema;
-  exchangeCount?: number;
-}
+// Bounds keep prompt size (and Gemini cost) capped even for hostile payloads.
+const respondBodySchema = z.object({
+  role: z.string().max(100).optional().default(""),
+  level: z.string().max(50).optional().default(""),
+  type: z.string().max(50).optional().default("Mixed"),
+  questions: z.array(z.string().max(1000)).max(20).optional().default([]),
+  userAnswer: z.string().min(1).max(8000),
+  conversationHistory: z
+    .array(
+      z.object({
+        role: z.enum(["user", "assistant", "system"]),
+        content: z.string().max(8000),
+      })
+    )
+    .max(40)
+    .optional()
+    .default([]),
+  interviewState: interviewStateSchema.optional(),
+  exchangeCount: z.coerce.number().int().min(0).max(50).optional().default(0),
+});
 
 export async function POST(request: Request) {
   try {
-    const body: RequestBody = await request.json();
+    // Auth: this route drives Gemini calls — signed-in users only.
+    const user = await getCurrentUser();
+    if (!user) {
+      return Response.json(
+        { success: false, error: "You must be signed in." },
+        { status: 401 }
+      );
+    }
+
+    const parsed = respondBodySchema.safeParse(await request.json());
+    if (!parsed.success) {
+      return Response.json(
+        { success: false, error: "Invalid request." },
+        { status: 400 }
+      );
+    }
     const {
       role,
       level,
@@ -34,19 +55,18 @@ export async function POST(request: Request) {
       conversationHistory,
       interviewState,
       exchangeCount,
-    } = body;
+    } = parsed.data;
 
-    const seedQuestions = questions ?? [];
-    const maxExchanges = maxExchangesFor(seedQuestions.length);
+    const maxExchanges = maxExchangesFor(questions.length);
     // The candidate has just submitted an answer; that one is counted here.
-    const answersGiven = (exchangeCount ?? 0) + 1;
+    const answersGiven = exchangeCount + 1;
 
     const { turn, isFinished } = await runAdaptiveTurn({
       role: role || "the role",
       level: level || "the",
       type: type || "Mixed",
-      seedQuestions,
-      conversationHistory: conversationHistory ?? [],
+      seedQuestions: questions,
+      conversationHistory,
       userAnswer,
       currentState: interviewState ?? DEFAULT_INTERVIEW_STATE,
       exchangeCount: answersGiven,

@@ -4,6 +4,7 @@ import { db } from "@/firebase/admin";
 import { generateObject } from "ai";
 import { google } from "@ai-sdk/google";
 import { feedbackSchema } from "@/constants";
+import { getCurrentUser } from "@/lib/actions/auth.action";
 
 export async function getInterviewById(id: string): Promise<Interview | null> {
   try {
@@ -112,6 +113,21 @@ export async function createFeedback({
   speakingAnalytics,
 }: CreateFeedbackParams): Promise<{ success: boolean; feedbackId?: string }> {
   try {
+    // Never trust the caller-supplied userId: server actions are public
+    // endpoints. The session must exist and match.
+    const sessionUser = await getCurrentUser();
+    if (!sessionUser || sessionUser.id !== userId) {
+      return { success: false };
+    }
+
+    // If overwriting existing feedback, it must belong to this user.
+    if (feedbackId) {
+      const existing = await db.collection("feedback").doc(feedbackId).get();
+      if (existing.exists && existing.data()?.userId !== sessionUser.id) {
+        return { success: false };
+      }
+    }
+
     const formattedTranscript = transcript
       .map(({ role, content }) => `- ${role}: ${content}`)
       .join("\n");
