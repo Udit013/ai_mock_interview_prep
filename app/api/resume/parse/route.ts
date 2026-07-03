@@ -2,8 +2,12 @@ import { extractText, getDocumentProxy } from "unpdf";
 import { structureResume, ResumeTooShortError } from "@/lib/ai/resume";
 import { saveResume } from "@/lib/actions/resume.action";
 import { getCurrentUser } from "@/lib/actions/auth.action";
+import { checkRateLimit, RATE_LIMITS } from "@/lib/rate-limit";
 
 export const maxDuration = 60;
+
+/** Reject absurdly large uploads before reading them into memory. */
+const MAX_PDF_BYTES = 5 * 1024 * 1024; // 5 MB
 
 export async function POST(request: Request) {
   try {
@@ -12,6 +16,18 @@ export async function POST(request: Request) {
       return Response.json(
         { success: false, error: "You must be signed in." },
         { status: 401 }
+      );
+    }
+
+    const { allowed } = await checkRateLimit(
+      user.id,
+      "resumeParse",
+      RATE_LIMITS.resumeParse
+    );
+    if (!allowed) {
+      return Response.json(
+        { success: false, error: "Daily résumé-upload limit reached." },
+        { status: 429 }
       );
     }
 
@@ -29,6 +45,13 @@ export async function POST(request: Request) {
       return Response.json(
         { success: false, error: "Please upload a PDF file." },
         { status: 400 }
+      );
+    }
+
+    if (file.size > MAX_PDF_BYTES) {
+      return Response.json(
+        { success: false, error: "PDF is too large (max 5 MB)." },
+        { status: 413 }
       );
     }
 

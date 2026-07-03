@@ -5,6 +5,7 @@ import { getRandomInterviewCover } from "@/lib/utils";
 import { db } from "@/firebase/admin";
 import { getCurrentUser } from "@/lib/actions/auth.action";
 import { resumeSchema, type ResumeSchema } from "@/lib/ai/resume";
+import { checkRateLimit, RATE_LIMITS } from "@/lib/rate-limit";
 
 export async function GET() {
   return Response.json({ success: true, data: "THANK YOU!" }, { status: 200 });
@@ -65,6 +66,21 @@ export async function POST(request: Request) {
       return Response.json(
         { success: false, error: "You must be signed in." },
         { status: 401 }
+      );
+    }
+
+    const { allowed } = await checkRateLimit(
+      user.id,
+      "generate",
+      RATE_LIMITS.generateInterview
+    );
+    if (!allowed) {
+      return Response.json(
+        {
+          success: false,
+          error: "Daily interview-generation limit reached. Try again tomorrow.",
+        },
+        { status: 429 }
       );
     }
 

@@ -31,8 +31,12 @@ A full-stack, AI-powered interview platform that conducts **adaptive voice inter
 ### Privacy
 - Every interview is **public or private**. Résumé interviews default to **private** and never appear in the community feed. A visibility badge (🔒 Private / 🌐 Public) is shown on each interview card.
 
-### Auth
+### Auth & Production Hardening
 - Firebase Auth with email/password, server-side session cookies, and protected routes.
+- **All AI endpoints require a valid session** — identity is derived server-side from the session cookie, never from the request body — and every request body is **Zod-validated with size bounds**.
+- **Per-user daily rate limits** on Gemini-backed endpoints (question generation, interview turns, résumé parsing) via a transactional Firestore counter — serverless-safe, no external services.
+- **Owner-only access to private interviews**, enforced on direct URLs as well as the community feed; résumé uploads capped at 5 MB.
+- **Unit tests (Vitest) + GitHub Actions CI** covering the deterministic core: speaking analytics, the adaptive engine's termination cap, schema validation, and the résumé guard.
 
 ---
 
@@ -159,6 +163,7 @@ npm run dev   # http://localhost:3000
 - **Dependency-free charts** — the progress dashboard uses hand-built SVG, adding zero client JS.
 - **Privacy by default for résumé interviews** — `visibility` filtering keeps personal interviews out of the community feed; older docs without the field remain public for backward compatibility.
 - **Index-free Firestore queries** — single-field `where` filters with client-side sort/filter avoid composite-index requirements.
+- **Defense in depth on AI endpoints** — session-derived identity, Zod-bounded request bodies (prompt size can't be inflated by hostile payloads), and transactional per-user daily rate limits that fail open so a limiter outage never takes the product down.
 - **Node 22+ compatibility** — `buffer-equal-constant-time` references `SlowBuffer` (removed in Node 22); resolved via a webpack + Turbopack alias to `lib/buffer-shim.js`.
 
 ---
