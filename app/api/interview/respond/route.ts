@@ -6,6 +6,7 @@ import {
   interviewStateSchema,
 } from "@/lib/ai/adaptive";
 import { getCurrentUser } from "@/lib/actions/auth.action";
+import { checkRateLimit, RATE_LIMITS } from "@/lib/rate-limit";
 
 // Bounds keep prompt size (and Gemini cost) capped even for hostile payloads.
 const respondBodySchema = z.object({
@@ -36,6 +37,18 @@ export async function POST(request: Request) {
       return Response.json(
         { success: false, error: "You must be signed in." },
         { status: 401 }
+      );
+    }
+
+    const { allowed } = await checkRateLimit(
+      user.id,
+      "respond",
+      RATE_LIMITS.interviewTurn
+    );
+    if (!allowed) {
+      return Response.json(
+        { success: false, error: "Daily interview limit reached." },
+        { status: 429 }
       );
     }
 
