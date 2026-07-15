@@ -2,6 +2,7 @@ import React from "react";
 import { redirect } from "next/navigation";
 import Image from "next/image";
 import Agent from "@/components/Agent";
+import CodingInterview from "@/components/CodingInterview";
 import DisplayTechIcons from "@/components/DisplayTechIcons";
 import { getCurrentUser } from "@/lib/actions/auth.action";
 import {
@@ -53,18 +54,31 @@ const Page = async ({ params }: RouteParams) => {
         </p>
       </div>
 
-      <Agent
-        userName={user.name}
-        userId={user.id}
-        interviewId={id}
-        feedbackId={feedback?.id}
-        type="interview"
-        questions={interview.questions}
-        role={interview.role}
-        level={interview.level}
-        interviewType={interview.type}
-        companyMode={interview.companyMode}
-      />
+      {interview.type === "Coding" ? (
+        <CodingInterview
+          userName={user.name}
+          userId={user.id}
+          interviewId={id}
+          feedbackId={feedback?.id}
+          questions={interview.questions}
+          role={interview.role}
+          level={interview.level}
+          companyMode={interview.companyMode}
+        />
+      ) : (
+        <Agent
+          userName={user.name}
+          userId={user.id}
+          interviewId={id}
+          feedbackId={feedback?.id}
+          type="interview"
+          questions={interview.questions}
+          role={interview.role}
+          level={interview.level}
+          interviewType={interview.type}
+          companyMode={interview.companyMode}
+        />
+      )}
     </>
   );
 };

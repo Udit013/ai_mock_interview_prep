@@ -288,6 +288,23 @@ const Agent = ({
     [questions, role, level, interviewType, companyMode, getCodeContext, speakText, startListening]
   );
 
+  // ── Coding interviews: explicit "review my code" requests ───────────────────
+  useEffect(() => {
+    if (!getCodeContext) return;
+    const onSubmitCode = () => {
+      if (statusRef.current !== CallStatus.ACTIVE) return;
+      // Stop listening/speaking and run a review turn with the current code.
+      recognitionRef.current?.abort();
+      window.speechSynthesis.cancel();
+      handleUserAnswer(
+        "I've just submitted my code for review — please take a look and share your thoughts."
+      );
+    };
+    window.addEventListener("prepwise:submit-code", onSubmitCode);
+    return () =>
+      window.removeEventListener("prepwise:submit-code", onSubmitCode);
+  }, [getCodeContext, handleUserAnswer]);
+
   // ── Finish: generate feedback and redirect ──────────────────────────────────
   useEffect(() => {
     if (callStatus !== CallStatus.FINISHED) return;
@@ -312,6 +329,7 @@ const Agent = ({
         transcript: messagesRef.current,
         feedbackId,
         speakingAnalytics,
+        finalCode: getCodeContext?.() ?? undefined,
       });
 
       if (success && newFeedbackId) {
