@@ -9,6 +9,7 @@ import {
   getFeedbackByInterviewId,
 } from "@/lib/actions/interview.action";
 import { Button } from "@/components/ui/button";
+import ShareFeedbackButton from "@/components/ShareFeedbackButton";
 import { cn } from "@/lib/utils";
 
 const Page = async ({ params }: RouteParams) => {
@@ -225,6 +226,20 @@ const Page = async ({ params }: RouteParams) => {
       <section className="flex flex-col gap-4">
         <h3>Final Assessment</h3>
         <p className="text-light-400">{feedback.finalAssessment}</p>
+      </section>
+
+      <hr className="border-dark-300" />
+
+      <section className="flex flex-col gap-3">
+        <h3>Share</h3>
+        <p className="text-light-400 text-sm">
+          Create a read-only public link to this report (scores and feedback
+          only — never your transcript or code). Revoke it anytime.
+        </p>
+        <ShareFeedbackButton
+          feedbackId={feedback.id}
+          initialToken={feedback.shareToken}
+        />
       </section>
 
       <div className="buttons">

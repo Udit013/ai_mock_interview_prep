@@ -1,6 +1,6 @@
 # PrepWise — AI Interview Intelligence Platform
 
-A full-stack, AI-powered interview platform that conducts **adaptive voice interviews**, generates questions from your **résumé**, analyzes your **speaking delivery**, and tracks your **progress over time** — entirely free, with no paid API dependencies.
+A full-stack, AI-powered interview platform that conducts **adaptive voice interviews** with a genuinely human interviewer — one that reacts to your **hesitation and confidence**, reviews your **live code**, adapts to **company-specific styles** — plus résumé-aware questions, speaking analytics, replay, shareable reports, and progress tracking. Entirely free, with no paid API dependencies.
 
 ## Live Demo
 
@@ -14,8 +14,14 @@ A full-stack, AI-powered interview platform that conducts **adaptive voice inter
 
 ### Core
 - **Adaptive Voice Interview** — Browser-native speech recognition captures your answers and text-to-speech asks questions aloud. The interviewer **adapts in real time**: strong answers raise difficulty, weak answers trigger follow-ups, missing fundamentals get probed, and unclear answers get clarifying questions.
-- **AI Question Generation** — Gemini generates role-specific, leveled questions tailored to your tech stack and interview type (Technical / Behavioral / Mixed).
+- **Human-like delivery awareness** — the browser measures how you answered (hesitation before speaking, pace, filler density, answer length) and the interviewer reacts like a person: long pauses get *"No worries, take your time"* and a gentler probe; composed, fast depth gets pushed harder. Delivery also feeds the interviewer's running confidence estimate.
+- **Five interview formats** — Technical, Behavioral, Mixed, **System Design** (requirements → scale estimation → trade-offs → bottlenecks), and **Coding** with a live editor.
+- **Live Coding Interviews (Monaco)** — a CoderPad-style split view: voice interviewer on one side, VS Code's Monaco editor (JS/Python/Java/C++) on the other. The interviewer sees your current code with every turn, and "Submit code for review" triggers a spoken code review that catches real bugs and probes complexity and testing. *(Deliberately no code execution: interviews evaluate reasoning, and sandboxing arbitrary code isn't safe on this stack.)*
+- **Company Interview Modes** — config-driven templates for Google, Amazon (Leadership Principles), Meta, Microsoft, Stripe, McKinsey (PEI), Bain, BCG, and Deloitte that shape the interviewer's persona, question emphasis, and evaluation criteria.
 - **AI Feedback Report** — Scored across 5 dimensions (Communication, Technical Knowledge, Problem Solving, Cultural Fit, Confidence) with strengths, areas for improvement, STAR-method completeness, and an overall assessment — all Zod-validated.
+- **Interview Replay** — every completed interview persists its transcript; watch it back as an animated chat timeline (play/pause/skip), including your submitted code for coding rounds. Owner-only.
+- **Résumé Coach** — candid AI suggestions over your stored résumé: bullet rewrites (with `<X>` metric placeholders, never invented numbers), missing elements recruiters expect, ATS keywords, and prioritized advice.
+- **Shareable Reports** — mint an unguessable read-only link to a feedback report (scores and feedback only — never your transcript or code) and revoke it anytime.
 
 ### Résumé-Aware Interviews
 - Upload a **PDF résumé**; text is extracted with `unpdf` (serverless, no native deps) and structured by Gemini into skills, projects, experiences, and technologies.
@@ -50,6 +56,7 @@ A full-stack, AI-powered interview platform that conducts **adaptive voice inter
 | Auth & Database | Firebase (Auth + Firestore) |
 | AI | Google **Gemini 2.5 Flash** (`@ai-sdk/google`, Vercel AI SDK) |
 | Voice I/O | Web Speech API (SpeechRecognition + SpeechSynthesis) |
+| Code editor | Monaco (`@monaco-editor/react`, lazy-loaded on the coding page only) |
 | PDF parsing | `unpdf` |
 | Validation | Zod (all AI outputs) |
 | Forms | react-hook-form |
@@ -170,11 +177,16 @@ npm run dev   # http://localhost:3000
 
 ## Migration Notes
 All schema changes are **additive and backward-compatible**:
-- `Interview.source` and `Interview.visibility` are optional; existing docs without them load fine (treated as public, manual).
-- `Feedback.speakingAnalytics` and `Feedback.starCompleteness` are optional; older feedback renders without those sections.
-- New collection `resumes/{uid}` is created on first résumé upload.
+- `Interview.source`, `Interview.visibility`, and `Interview.companyMode` are optional; existing docs without them load fine (treated as public, manual, generic).
+- `Feedback.speakingAnalytics`, `starCompleteness`, `transcript`, `finalCode`, and `shareToken` are optional; older feedback renders without those sections (no transcript → no replay link).
+- New collections: `resumes/{uid}` (first résumé upload) and `rateLimits` (transactional daily counters).
 
 No environment variables were added.
+
+## Deliberately Not Built
+- **Barge-in interruptions** — the Web Speech recognizer picks up the app's own text-to-speech through the mic (no reliable echo cancellation), causing false triggers. Fake realism that degrades UX.
+- **Leaderboards** — privacy-sensitive, gameable, and empty-looking at small scale.
+- **Code execution** — running untrusted code requires sandbox infrastructure out of scope for a free serverless stack; the interviewer reviews code the way a human does instead.
 
 ---
 

@@ -43,4 +43,5 @@ export const RATE_LIMITS = {
   generateInterview: 20,
   interviewTurn: 300,
   resumeParse: 10,
+  resumeCoach: 5,
 } as const;

@@ -54,6 +54,56 @@ export class ResumeTooShortError extends Error {
   }
 }
 
+/** Actionable résumé coaching produced from the stored parsed résumé. */
+export const resumeImprovementSchema = z.object({
+  bulletRewrites: z
+    .array(
+      z.object({
+        before: z.string().describe("A weak bullet/highlight from the résumé, verbatim or close to it."),
+        after: z.string().describe("A stronger rewrite: action verb, specifics, measurable outcome."),
+        why: z.string().describe("One sentence on what the rewrite fixes."),
+      })
+    )
+    .min(1)
+    .max(6),
+  missingElements: z
+    .array(z.string())
+    .describe("Important things recruiters expect that this résumé lacks (metrics, links, scope, etc.)."),
+  atsKeywords: z
+    .array(z.string())
+    .describe("Role-relevant keywords/technologies worth adding for ATS matching."),
+  overallAdvice: z
+    .string()
+    .describe("2-3 sentences of prioritized, candid overall advice."),
+});
+
+export type ResumeImprovements = z.infer<typeof resumeImprovementSchema>;
+
+/** Generate coaching suggestions for a stored parsed résumé. */
+export async function generateResumeImprovements(
+  resume: ResumeSchema
+): Promise<ResumeImprovements> {
+  const { object } = await generateObject({
+    model: google("gemini-2.5-flash"),
+    schema: resumeImprovementSchema,
+    prompt: `You are a blunt, expert résumé coach for software/consulting candidates.
+Review this structured résumé and produce concrete improvements.
+
+Résumé:
+${JSON.stringify(resume, null, 2)}
+
+Rules:
+- bulletRewrites: pick the weakest real highlights and rewrite them with strong
+  action verbs, specificity, and measurable outcomes. Never invent numbers —
+  use placeholders like "<X>%" where the candidate must fill in the metric.
+- missingElements: what a recruiter would flag as absent.
+- atsKeywords: only keywords plausibly true given their experience.
+- overallAdvice: prioritized and candid, not generic praise.`,
+  });
+
+  return object;
+}
+
 /**
  * Turn raw resume text into a structured `ParsedResume` using Gemini.
  * Throws `ResumeTooShortError` when the extracted text is too small to be a
