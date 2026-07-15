@@ -1,0 +1,12 @@
+<svg width="200" height="200" viewBox="0 0 200 200" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="User avatar">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="200" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#2A2740"/>
+      <stop offset="1" stop-color="#1B1930"/>
+    </linearGradient>
+  </defs>
+  <circle cx="100" cy="100" r="100" fill="url(#bg)"/>
+  <!-- Minimal, neutral person silhouette -->
+  <circle cx="100" cy="82" r="30" fill="#CAC5FE"/>
+  <path d="M46 165c0-29.8 24.2-54 54-54s54 24.2 54 54v6a4 4 0 0 1-4 4H50a4 4 0 0 1-4-4v-6Z" fill="#CAC5FE"/>
+</svg>
