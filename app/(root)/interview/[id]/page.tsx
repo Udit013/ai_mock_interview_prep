@@ -63,6 +63,7 @@ const Page = async ({ params }: RouteParams) => {
         role={interview.role}
         level={interview.level}
         interviewType={interview.type}
+        companyMode={interview.companyMode}
       />
     </>
   );

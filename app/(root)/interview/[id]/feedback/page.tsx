@@ -235,6 +235,12 @@ const Page = async ({ params }: RouteParams) => {
           </Link>
         </Button>
 
+        {feedback.transcript && feedback.transcript.length > 0 && (
+          <Button asChild className="btn-secondary flex-1">
+            <Link href={`/interview/${id}/replay`}>▶ Watch Replay</Link>
+          </Button>
+        )}
+
         <Button asChild className="btn-primary flex-1">
           <Link href={`/interview/${id}`}>
             <Image src="/user-avatar.png" alt="retry" width={20} height={20} />

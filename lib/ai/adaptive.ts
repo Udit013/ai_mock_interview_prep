@@ -56,16 +56,70 @@ export function maxExchangesFor(seedQuestionCount: number): number {
   return Math.min(Math.max(seedQuestionCount, 1) + 4, 12);
 }
 
+/**
+ * How the candidate *delivered* their last answer — measured in the browser,
+ * so the interviewer can react to hesitation and confidence like a human.
+ */
+export const deliverySignalsSchema = z.object({
+  hesitationSeconds: z.number().min(0).max(120),
+  answerSeconds: z.number().min(0).max(600),
+  wordCount: z.number().int().min(0).max(5000),
+  fillerCount: z.number().int().min(0).max(500),
+});
+
+export type DeliverySignals = z.infer<typeof deliverySignalsSchema>;
+
+/** Code the candidate submitted for review during a coding interview. */
+export const codeSubmissionSchema = z.object({
+  language: z.enum(["javascript", "python", "java", "cpp"]),
+  code: z.string().max(20_000),
+});
+
+export type CodeSubmission = z.infer<typeof codeSubmissionSchema>;
+
+function describeDelivery(signals: DeliverySignals): string {
+  const notes: string[] = [];
+
+  if (signals.hesitationSeconds >= 8) {
+    notes.push(
+      `paused ${Math.round(signals.hesitationSeconds)}s before answering (long hesitation)`
+    );
+  } else if (signals.hesitationSeconds <= 2) {
+    notes.push("answered promptly");
+  }
+
+  const wpm =
+    signals.answerSeconds > 0
+      ? Math.round((signals.wordCount / signals.answerSeconds) * 60)
+      : 0;
+  if (wpm > 0) notes.push(`spoke at ~${wpm} words/min`);
+
+  if (signals.wordCount > 0) {
+    const fillerRate = signals.fillerCount / signals.wordCount;
+    if (fillerRate > 0.12) notes.push("heavy filler-word use (sounds unsure)");
+    else if (signals.fillerCount === 0) notes.push("no filler words (composed)");
+  }
+
+  if (signals.wordCount < 15 && signals.answerSeconds < 8) {
+    notes.push("very short answer");
+  }
+
+  return notes.join("; ");
+}
+
 interface RunAdaptiveTurnArgs {
   role: string;
   level: string;
-  type: string; // Technical | Behavioral | Mixed
+  type: string; // Technical | Behavioral | Mixed | System Design | Coding
   seedQuestions: string[];
   conversationHistory: { role: string; content: string }[];
   userAnswer: string;
   currentState: InterviewStateSchema;
   exchangeCount: number; // how many answers the candidate has now given
   maxExchanges: number;
+  deliverySignals?: DeliverySignals;
+  codeSubmission?: CodeSubmission;
+  companyBlock?: string;
 }
 
 /**
@@ -86,6 +140,9 @@ export async function runAdaptiveTurn(
     currentState,
     exchangeCount,
     maxExchanges,
+    deliverySignals,
+    codeSubmission,
+    companyBlock,
   } = args;
 
   const mustFinish = exchangeCount >= maxExchanges;
@@ -97,14 +154,31 @@ export async function runAdaptiveTurn(
     )
     .join("\n");
 
+  const t = type.toLowerCase();
   const typeGuidance =
-    type.toLowerCase() === "behavioral"
+    t === "behavioral"
       ? "This is a behavioral interview. Probe for specifics using the STAR structure (Situation, Task, Action, Result) and real examples."
-      : type.toLowerCase() === "technical"
+      : t === "technical"
       ? "This is a technical interview. Probe depth of understanding, trade-offs, and correctness."
+      : t === "system design"
+      ? "This is a system design interview. Expect the candidate to clarify requirements before designing, estimate scale (users, QPS, storage), reason about trade-offs (consistency vs availability, SQL vs NoSQL, caching), identify bottlenecks, and evolve the design as you add constraints. Push on whatever they gloss over."
+      : t === "coding"
+      ? "This is a coding interview. The candidate is writing code in an editor while talking. Evaluate their approach, correctness, complexity analysis, and edge-case thinking. When they submit code, review it like a human interviewer: point at specific lines conversationally, probe bugs and complexity, and ask how they would test it."
       : "This is a mixed interview. Blend behavioral and technical probing as appropriate.";
 
+  const deliveryNote = deliverySignals ? describeDelivery(deliverySignals) : "";
+
+  const codeBlock = codeSubmission
+    ? `\nThe candidate just submitted this ${codeSubmission.language} code for review:\n\`\`\`${codeSubmission.language}\n${codeSubmission.code}\n\`\`\`\n`
+    : "";
+
   const prompt = `You are an expert, genuinely adaptive interviewer conducting a ${level} ${type} interview for a ${role} position. ${typeGuidance}
+${companyBlock ?? ""}${
+    deliveryNote
+      ? `\nDelivery observation for the candidate's last answer: ${deliveryNote}.
+React to delivery like a considerate human interviewer would: if they hesitated a long time or sound unsure, briefly reassure them or offer to rephrase before probing; if they were composed and fast, you can push harder. Fold delivery into your estimatedConfidence. Never recite these metrics back verbatim.\n`
+      : ""
+  }${codeBlock}
 
 You are given a backbone of seed questions to cover, but you adapt based on how the candidate is doing:
 - Strong, deep answer -> raise difficulty (action: increase_difficulty) or move on (next_topic).

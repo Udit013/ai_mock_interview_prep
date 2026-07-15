@@ -4,7 +4,10 @@ import {
   maxExchangesFor,
   DEFAULT_INTERVIEW_STATE,
   interviewStateSchema,
+  deliverySignalsSchema,
+  codeSubmissionSchema,
 } from "@/lib/ai/adaptive";
+import { companyPromptBlock } from "@/constants/companies";
 import { getCurrentUser } from "@/lib/actions/auth.action";
 import { checkRateLimit, RATE_LIMITS } from "@/lib/rate-limit";
 
@@ -27,6 +30,12 @@ const respondBodySchema = z.object({
     .default([]),
   interviewState: interviewStateSchema.optional(),
   exchangeCount: z.coerce.number().int().min(0).max(50).optional().default(0),
+  // Realism: how the answer was delivered (hesitation, pace, fillers).
+  deliverySignals: deliverySignalsSchema.optional(),
+  // Coding interviews: code the candidate submitted for review.
+  codeSubmission: codeSubmissionSchema.optional(),
+  // Company template id — styles prompts only, so client-supplied is fine.
+  companyMode: z.string().max(30).optional(),
 });
 
 export async function POST(request: Request) {
@@ -68,6 +77,9 @@ export async function POST(request: Request) {
       conversationHistory,
       interviewState,
       exchangeCount,
+      deliverySignals,
+      codeSubmission,
+      companyMode,
     } = parsed.data;
 
     const maxExchanges = maxExchangesFor(questions.length);
@@ -84,6 +96,9 @@ export async function POST(request: Request) {
       currentState: interviewState ?? DEFAULT_INTERVIEW_STATE,
       exchangeCount: answersGiven,
       maxExchanges,
+      deliverySignals,
+      codeSubmission,
+      companyBlock: companyPromptBlock(companyMode),
     });
 
     return Response.json({

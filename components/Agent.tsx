@@ -6,7 +6,19 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { createFeedback } from "@/lib/actions/interview.action";
-import { analyzeSpeaking } from "@/lib/analytics/speaking";
+import {
+  analyzeSpeaking,
+  countFillerWords,
+  wordCount,
+} from "@/lib/analytics/speaking";
+
+// Mirrors DeliverySignals in lib/ai/adaptive.ts (kept local: no server imports).
+interface DeliverySignalsPayload {
+  hesitationSeconds: number;
+  answerSeconds: number;
+  wordCount: number;
+  fillerCount: number;
+}
 
 // Local copy so this client component never imports server-only AI libs.
 const DEFAULT_INTERVIEW_STATE: InterviewState = {
@@ -49,6 +61,8 @@ const Agent = ({
   role,
   level,
   interviewType,
+  companyMode,
+  getCodeContext,
 }: AgentProps) => {
   const router = useRouter();
   const [callStatus, setCallStatus] = useState<CallStatus>(CallStatus.INACTIVE);
@@ -67,6 +81,10 @@ const Agent = ({
   // Phase 4: per-answer speaking durations (seconds) for analytics.
   const answerStartRef = useRef(0);
   const answerDurationsRef = useRef<number[]>([]);
+  // Realism: when the candidate actually started speaking (vs. listening start)
+  // and the delivery profile of their last answer.
+  const firstSpeechAtRef = useRef<number | null>(null);
+  const lastSignalsRef = useRef<DeliverySignalsPayload | null>(null);
   const recognitionRef = useRef<InstanceType<SpeechRecognitionCtor> | null>(null);
   const synthRef = useRef<SpeechSynthesisUtterance | null>(null);
   const statusRef = useRef<CallStatus>(CallStatus.INACTIVE);
@@ -151,10 +169,14 @@ const Agent = ({
 
       recognition.onstart = () => {
         answerStartRef.current = Date.now();
+        firstSpeechAtRef.current = null;
         setIsListening(true);
       };
 
       recognition.onresult = (event: SpeechRecognitionEvent) => {
+        if (firstSpeechAtRef.current === null) {
+          firstSpeechAtRef.current = Date.now();
+        }
         const interim = Array.from(event.results)
           .map((r: SpeechRecognitionResult) => r[0].transcript)
           .join("");
@@ -162,12 +184,28 @@ const Agent = ({
 
         if (event.results[event.results.length - 1].isFinal) {
           setInterimTranscript("");
+          const now = Date.now();
           // Record how long this answer took, for speaking analytics.
-          const seconds = (Date.now() - answerStartRef.current) / 1000;
+          const seconds = (now - answerStartRef.current) / 1000;
           if (seconds > 0 && seconds < 600) {
             answerDurationsRef.current.push(seconds);
           }
-          onResult(interim.trim());
+
+          // Delivery profile for the adaptive interviewer: how long they
+          // hesitated before speaking, and how the answer was delivered.
+          const text = interim.trim();
+          const spokeAt = firstSpeechAtRef.current ?? now;
+          lastSignalsRef.current = {
+            hesitationSeconds: Math.min(
+              Math.max((spokeAt - answerStartRef.current) / 1000, 0),
+              120
+            ),
+            answerSeconds: Math.min(Math.max((now - spokeAt) / 1000, 0), 600),
+            wordCount: wordCount(text),
+            fillerCount: countFillerWords(text).total,
+          };
+
+          onResult(text);
         }
       };
 
@@ -211,6 +249,9 @@ const Agent = ({
             conversationHistory: messagesRef.current,
             interviewState: interviewStateRef.current,
             exchangeCount: exchangeCountRef.current,
+            deliverySignals: lastSignalsRef.current ?? undefined,
+            companyMode,
+            codeSubmission: getCodeContext?.() ?? undefined,
           }),
         });
 
@@ -244,7 +285,7 @@ const Agent = ({
         toast.error("Connection error. Please check your internet.");
       }
     },
-    [questions, role, level, interviewType, speakText, startListening]
+    [questions, role, level, interviewType, companyMode, getCodeContext, speakText, startListening]
   );
 
   // ── Finish: generate feedback and redirect ──────────────────────────────────

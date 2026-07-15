@@ -4,6 +4,7 @@ import { db } from "@/firebase/admin";
 import { generateObject } from "ai";
 import { google } from "@ai-sdk/google";
 import { feedbackSchema } from "@/constants";
+import { companyPromptBlock } from "@/constants/companies";
 import { getCurrentUser } from "@/lib/actions/auth.action";
 
 export async function getInterviewById(id: string): Promise<Interview | null> {
@@ -111,6 +112,7 @@ export async function createFeedback({
   transcript,
   feedbackId,
   speakingAnalytics,
+  finalCode,
 }: CreateFeedbackParams): Promise<{ success: boolean; feedbackId?: string }> {
   try {
     // Never trust the caller-supplied userId: server actions are public
@@ -128,18 +130,31 @@ export async function createFeedback({
       }
     }
 
-    const formattedTranscript = transcript
+    // Company mode (if any) shapes the evaluation emphasis.
+    const interviewDoc = await db.collection("interviews").doc(interviewId).get();
+    const companyBlock = companyPromptBlock(interviewDoc.data()?.companyMode);
+
+    // Cap the persisted transcript so a hostile caller can't bloat documents.
+    const storedTranscript = transcript
+      .slice(0, 60)
+      .map(({ role, content }) => ({ role, content: content.slice(0, 4000) }));
+
+    const formattedTranscript = storedTranscript
       .map(({ role, content }) => `- ${role}: ${content}`)
       .join("\n");
+
+    const codeSection = finalCode
+      ? `\nThe candidate's final submitted code (${finalCode.language}):\n\`\`\`\n${finalCode.code.slice(0, 20000)}\n\`\`\`\nInclude code quality (correctness, complexity, edge cases, readability) in your evaluation.\n`
+      : "";
 
     const { object: feedbackData } = await generateObject({
       model: google("gemini-2.5-flash"),
       schema: feedbackSchema,
       prompt: `You are an expert interview coach analyzing a mock job interview transcript.
-
+${companyBlock}
 Transcript:
 ${formattedTranscript}
-
+${codeSection}
 Evaluate the candidate on these 5 dimensions (score each 0-100):
 1. Communication Skills — clarity, structure, articulation
 2. Technical Knowledge — accuracy and depth of technical answers
@@ -171,6 +186,16 @@ Be specific and constructive. Reference actual moments from the transcript when 
       ...feedbackData,
       // Phase 4: persist deterministic speaking metrics alongside the AI feedback.
       ...(speakingAnalytics ? { speakingAnalytics } : {}),
+      // Realism: persist the transcript for interview replay.
+      transcript: storedTranscript,
+      ...(finalCode
+        ? {
+            finalCode: {
+              language: finalCode.language,
+              code: finalCode.code.slice(0, 20000),
+            },
+          }
+        : {}),
       createdAt: new Date().toISOString(),
     });
 
