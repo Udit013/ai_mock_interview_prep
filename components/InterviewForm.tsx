@@ -10,13 +10,15 @@ import { Button } from "@/components/ui/button";
 import { Form } from "@/components/ui/form";
 import FormField from "@/components/FormField";
 import { cn } from "@/lib/utils";
+import { COMPANY_MODES } from "@/constants/companies";
 
 const schema = z.object({
   role: z.string().min(2, "Role must be at least 2 characters"),
   level: z.enum(["Junior", "Mid", "Senior"]),
-  type: z.enum(["Technical", "Behavioral", "Mixed"]),
+  type: z.enum(["Technical", "Behavioral", "Mixed", "System Design", "Coding"]),
   techstack: z.string().optional(),
   amount: z.coerce.number().min(3).max(15),
+  companyMode: z.string().optional(),
 });
 
 type FormValues = z.infer<typeof schema>;
@@ -51,6 +53,7 @@ const InterviewForm = () => {
       type: "Mixed",
       techstack: "",
       amount: 5,
+      companyMode: "",
     },
   });
 
@@ -252,8 +255,42 @@ const InterviewForm = () => {
                   <option value="Technical">Technical</option>
                   <option value="Behavioral">Behavioral</option>
                   <option value="Mixed">Mixed</option>
+                  <option value="System Design">System Design</option>
+                  <option value="Coding">Coding (live editor)</option>
                 </select>
               </div>
+            </div>
+
+            <div className="flex flex-col gap-2">
+              <label className="label">Company Style (optional)</label>
+              <select
+                {...form.register("companyMode")}
+                className="input bg-dark-200 text-white border border-dark-300 rounded-lg px-3 py-2"
+              >
+                <option value="">Generic interview</option>
+                <optgroup label="Software">
+                  {Object.values(COMPANY_MODES)
+                    .filter((c) => c.category === "software")
+                    .map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name}
+                      </option>
+                    ))}
+                </optgroup>
+                <optgroup label="Consulting">
+                  {Object.values(COMPANY_MODES)
+                    .filter((c) => c.category === "consulting")
+                    .map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name}
+                      </option>
+                    ))}
+                </optgroup>
+              </select>
+              <p className="text-xs text-light-400">
+                Tailors the interviewer&apos;s style, question emphasis, and
+                evaluation criteria to that company&apos;s real process.
+              </p>
             </div>
 
             {mode === "manual" && (

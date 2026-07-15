@@ -79,6 +79,12 @@ interface Feedback {
   speakingAnalytics?: SpeakingAnalytics;
   starCompleteness?: StarCompleteness;
   userId?: string;
+  // Realism: persisted transcript for interview replay (capped server-side).
+  transcript?: { role: string; content: string }[];
+  // Coding interviews: the candidate's final submitted code.
+  finalCode?: { language: string; code: string };
+  // Sharing: unguessable token; presence means the report is shareable.
+  shareToken?: string;
 }
 
 interface Interview {
@@ -95,6 +101,8 @@ interface Interview {
   source?: "manual" | "resume";
   // Privacy: "private" interviews are never shown in the community feed.
   visibility?: "public" | "private";
+  // Company template id (e.g. "google", "amazon", "mckinsey").
+  companyMode?: string;
 }
 
 // ── Phase 5: Progress Dashboard ───────────────────────────────────────────────
@@ -177,6 +185,8 @@ interface CreateFeedbackParams {
   feedbackId?: string;
   // Phase 4: deterministic browser-computed speaking metrics.
   speakingAnalytics?: SpeakingAnalytics;
+  // Coding interviews: the candidate's final submitted code.
+  finalCode?: { language: string; code: string };
 }
 
 interface User {
@@ -196,6 +206,11 @@ interface InterviewCardProps {
   visibility?: "public" | "private";
 }
 
+interface CodeContextPayload {
+  language: "javascript" | "python" | "java" | "cpp";
+  code: string;
+}
+
 interface AgentProps {
   userName: string;
   userId?: string;
@@ -206,7 +221,11 @@ interface AgentProps {
   // Phase 2: passed so the adaptive engine knows the real interview context.
   role?: string;
   level?: string;
-  interviewType?: string; // Technical | Behavioral | Mixed
+  interviewType?: string; // Technical | Behavioral | Mixed | System Design | Coding
+  // Company template id (styles interviewer persona/prompts).
+  companyMode?: string;
+  // Coding interviews: returns the candidate's current editor contents.
+  getCodeContext?: () => CodeContextPayload | null;
 }
 
 interface RouteParams {

@@ -6,6 +6,7 @@ import { db } from "@/firebase/admin";
 import { getCurrentUser } from "@/lib/actions/auth.action";
 import { resumeSchema, type ResumeSchema } from "@/lib/ai/resume";
 import { checkRateLimit, RATE_LIMITS } from "@/lib/rate-limit";
+import { getCompanyMode, companyPromptBlock } from "@/constants/companies";
 
 export async function GET() {
   return Response.json({ success: true, data: "THANK YOU!" }, { status: 200 });
@@ -13,7 +14,7 @@ export async function GET() {
 
 // Identity comes from the session cookie, never from the request body.
 const generateBodySchema = z.object({
-  type: z.enum(["Technical", "Behavioral", "Mixed"]),
+  type: z.enum(["Technical", "Behavioral", "Mixed", "System Design", "Coding"]),
   role: z.string().min(2).max(100),
   level: z.enum(["Junior", "Mid", "Senior"]),
   techstack: z.string().max(300).optional().default(""),
@@ -21,6 +22,7 @@ const generateBodySchema = z.object({
   source: z.enum(["manual", "resume"]).optional(),
   resumeContext: resumeSchema.optional(),
   visibility: z.enum(["public", "private"]).optional(),
+  companyMode: z.string().max(30).optional(),
 });
 
 /**
@@ -91,12 +93,33 @@ export async function POST(request: Request) {
         { status: 400 }
       );
     }
-    const { type, role, level, techstack, amount, source, resumeContext, visibility } =
-      parsedBody.data;
+    const {
+      type,
+      role,
+      level,
+      techstack,
+      amount,
+      source,
+      resumeContext,
+      visibility,
+      companyMode,
+    } = parsedBody.data;
+
+    // Only persist known company modes; unknown ids degrade to generic.
+    const company = getCompanyMode(companyMode);
+    const companyBlock = companyPromptBlock(company?.id);
     const isResume = source === "resume" && resumeContext;
+
+    const typeInstructions =
+      type === "Coding"
+        ? `Each question must be a self-contained coding problem: a short scenario, the task, input/output expectations, and one example. The candidate will solve it in a code editor while talking, so make problems solvable in 15-25 minutes and speakable aloud.`
+        : type === "System Design"
+        ? `Each question should be an open-ended system design prompt (e.g. "Design a URL shortener for 100M users"). Include a hint of scale so the candidate must estimate and make trade-offs.`
+        : "";
 
     const prompt = isResume
       ? `Prepare ${amount} interview questions for a ${level} ${role} candidate, with the focus leaning towards ${type} questions.
+${companyBlock}${typeInstructions}
 
 Base the questions on THIS candidate's actual resume below. Reference their real projects, technologies, and decisions. Probe the "why" behind their choices and the depth of their experience.
 
@@ -116,6 +139,7 @@ Return ONLY a JSON array of strings, like:
         The tech stack used in the job is: ${techstack}.
         The focus between behavioural and technical questions should lean towards: ${type}.
         The amount of questions required is: ${amount}.
+        ${companyBlock}${typeInstructions}
         Please return only the questions, without any additional text.
         The questions are going to be read by a voice assistant so do not use "/" or "*" or any other special characters which might break the voice assistant.
         Return the questions formatted like this:
@@ -166,6 +190,7 @@ Return ONLY a JSON array of strings, like:
       finalized: true,
       source: source ?? "manual",
       visibility: resolvedVisibility,
+      ...(company ? { companyMode: company.id } : {}),
       coverImage: getRandomInterviewCover(),
       createdAt: new Date().toISOString(),
     };
