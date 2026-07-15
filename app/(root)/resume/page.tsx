@@ -1,10 +1,9 @@
 import React from "react";
 import { redirect } from "next/navigation";
-import Link from "next/link";
 import { getCurrentUser } from "@/lib/actions/auth.action";
 import { getResumeByUserId } from "@/lib/actions/resume.action";
 import ResumeCoach from "@/components/ResumeCoach";
-import { Button } from "@/components/ui/button";
+import ResumeUpload from "@/components/ResumeUpload";
 
 const Page = async () => {
   const user = await getCurrentUser();
@@ -17,21 +16,22 @@ const Page = async () => {
       <section className="flex flex-col gap-4 items-start">
         <h2>Résumé Coach</h2>
         <p className="text-light-400">
-          You haven&apos;t uploaded a résumé yet. Upload one while creating an
-          interview and it will appear here for AI coaching.
+          Upload your résumé (PDF) to get AI-powered improvement suggestions —
+          bullet rewrites, missing elements, and ATS keywords.
         </p>
-        <Button asChild className="btn-primary">
-          <Link href="/interview">Upload via Create Interview</Link>
-        </Button>
+        <ResumeUpload label="Upload résumé (PDF)" />
       </section>
     );
   }
 
   return (
     <section className="flex flex-col gap-6">
-      <div className="flex flex-col gap-1">
-        <h2>Résumé Coach</h2>
-        <p className="text-light-400">{resume.summary}</p>
+      <div className="flex items-start justify-between gap-4 max-sm:flex-col">
+        <div className="flex flex-col gap-1">
+          <h2>Résumé Coach</h2>
+          <p className="text-light-400">{resume.summary}</p>
+        </div>
+        <ResumeUpload label="Replace résumé" variant="secondary" />
       </div>
 
       <div className="flex flex-wrap gap-2">

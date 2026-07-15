@@ -102,7 +102,7 @@ const ReplayPlayer = ({ transcript, userName, finalCode }: ReplayPlayerProps) =>
               )}
             >
               <Image
-                src={isUser ? "/user-avatar.png" : "/ai-avatar.png"}
+                src={isUser ? "/user-avatar.svg" : "/ai-avatar.png"}
                 alt={isUser ? userName : "AI Interviewer"}
                 width={36}
                 height={36}

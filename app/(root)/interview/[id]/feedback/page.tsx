@@ -258,7 +258,7 @@ const Page = async ({ params }: RouteParams) => {
 
         <Button asChild className="btn-primary flex-1">
           <Link href={`/interview/${id}`}>
-            <Image src="/user-avatar.png" alt="retry" width={20} height={20} />
+            <Image src="/user-avatar.svg" alt="retry" width={20} height={20} />
             Retake Interview
           </Link>
         </Button>
