@@ -332,3 +332,76 @@
     transform: translateY(0);
   }
 }
+
+/* ── Premium motion (dependency-free) ─────────────────────────────────────── */
+
+@keyframes fadeUp {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes barFill {
+  from {
+    width: 0%;
+  }
+}
+
+/* Section/message entrances */
+.fade-up,
+.replay-message {
+  animation: fadeUp 0.45s ease-out both;
+}
+
+/* Staggered entrance for card grids and stat rows */
+.interviews-section > *,
+.card-cta,
+section {
+  animation: fadeUp 0.5s ease-out both;
+}
+.interviews-section > *:nth-child(2) {
+  animation-delay: 0.07s;
+}
+.interviews-section > *:nth-child(3) {
+  animation-delay: 0.14s;
+}
+.interviews-section > *:nth-child(4) {
+  animation-delay: 0.21s;
+}
+
+/* Card hover lift */
+.card-border {
+  transition: transform 0.25s ease, box-shadow 0.25s ease;
+}
+.card-border:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+}
+
+/* Score bars fill in on load */
+.section-feedback .h-2 > div,
+[class*="rounded-full"] > .h-2 {
+  animation: barFill 0.9s ease-out both;
+}
+
+/* Respect users who prefer reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  .fade-up,
+  .replay-message,
+  .interviews-section > *,
+  .card-cta,
+  section,
+  .section-feedback .h-2 > div {
+    animation: none;
+  }
+  .card-border,
+  .card-border:hover {
+    transition: none;
+    transform: none;
+  }
+}

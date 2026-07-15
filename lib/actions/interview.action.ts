@@ -1,5 +1,6 @@
 "use server";
 
+import { randomBytes } from "crypto";
 import { db } from "@/firebase/admin";
 import { generateObject } from "ai";
 import { google } from "@ai-sdk/google";
@@ -102,6 +103,75 @@ export async function getFeedbackByInterviewId({
     return { id: doc.id, ...doc.data() } as Feedback;
   } catch (e) {
     console.error("getFeedbackByInterviewId error:", e);
+    return null;
+  }
+}
+
+/** Enable sharing: mints an unguessable token for the owner's feedback doc. */
+export async function shareFeedback(
+  feedbackId: string
+): Promise<{ success: boolean; shareToken?: string }> {
+  try {
+    const user = await getCurrentUser();
+    if (!user) return { success: false };
+
+    const ref = db.collection("feedback").doc(feedbackId);
+    const doc = await ref.get();
+    if (!doc.exists || doc.data()?.userId !== user.id) {
+      return { success: false };
+    }
+
+    const shareToken = randomBytes(16).toString("hex"); // 32 hex chars
+    await ref.update({ shareToken });
+    return { success: true, shareToken };
+  } catch (e) {
+    console.error("shareFeedback error:", e);
+    return { success: false };
+  }
+}
+
+/** Revoke sharing: removes the token so the public link stops working. */
+export async function unshareFeedback(
+  feedbackId: string
+): Promise<{ success: boolean }> {
+  try {
+    const user = await getCurrentUser();
+    if (!user) return { success: false };
+
+    const ref = db.collection("feedback").doc(feedbackId);
+    const doc = await ref.get();
+    if (!doc.exists || doc.data()?.userId !== user.id) {
+      return { success: false };
+    }
+
+    await ref.update({ shareToken: null });
+    return { success: true };
+  } catch (e) {
+    console.error("unshareFeedback error:", e);
+    return { success: false };
+  }
+}
+
+/** Public lookup by share token — returns null for invalid/revoked tokens. */
+export async function getFeedbackByShareToken(
+  token: string
+): Promise<{ feedback: Feedback; interview: Interview | null } | null> {
+  try {
+    if (!/^[a-f0-9]{32}$/.test(token)) return null;
+
+    const snapshot = await db
+      .collection("feedback")
+      .where("shareToken", "==", token)
+      .limit(1)
+      .get();
+    if (snapshot.empty) return null;
+
+    const doc = snapshot.docs[0];
+    const feedback = { id: doc.id, ...doc.data() } as Feedback;
+    const interview = await getInterviewById(feedback.interviewId);
+    return { feedback, interview };
+  } catch (e) {
+    console.error("getFeedbackByShareToken error:", e);
     return null;
   }
 }

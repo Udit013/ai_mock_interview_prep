@@ -16,6 +16,14 @@ const RootLayout = async ({ children }: { children: ReactNode }) => {
           <h2 className="text-primary-100">PrepWise</h2>
         </Link>
 
+        <div className="flex items-center gap-6">
+          <Link
+            href="/resume"
+            className="text-light-400 hover:text-primary-100 transition-colors text-sm"
+          >
+            Résumé Coach
+          </Link>
+
         <form
           action={async () => {
             "use server";
@@ -30,6 +38,7 @@ const RootLayout = async ({ children }: { children: ReactNode }) => {
             Sign Out
           </button>
         </form>
+        </div>
       </nav>
 
       {children}
