@@ -29,6 +29,13 @@ export const adaptiveTurnSchema = z.object({
     "finish",
   ]),
   updatedState: interviewStateSchema,
+  activeQuestionIndex: z
+    .number()
+    .int()
+    .min(0)
+    .describe(
+      "0-based index of the seed question currently being discussed, so the UI can highlight it."
+    ),
   spokenResponse: z
     .string()
     .describe(
@@ -163,7 +170,7 @@ export async function runAdaptiveTurn(
       : t === "system design"
       ? "This is a system design interview. Expect the candidate to clarify requirements before designing, estimate scale (users, QPS, storage), reason about trade-offs (consistency vs availability, SQL vs NoSQL, caching), identify bottlenecks, and evolve the design as you add constraints. Push on whatever they gloss over."
       : t === "coding"
-      ? "This is a coding interview. The candidate is writing code in an editor while talking. Evaluate their approach, correctness, complexity analysis, and edge-case thinking. When they submit code, review it like a human interviewer: point at specific lines conversationally, probe bugs and complexity, and ask how they would test it."
+      ? "This is a coding interview. The candidate is writing code in an editor while talking. IMPORTANT: the full problem statement is displayed on their screen, so NEVER read a problem aloud — refer to it in a few words instead (e.g. \"the two-sum problem\") and move straight to discussion. Evaluate their approach, correctness, complexity analysis, and edge-case thinking. When they submit code, review it like a human interviewer: point at specific lines conversationally, probe bugs and complexity, and ask how they would test it."
       : "This is a mixed interview. Blend behavioral and technical probing as appropriate.";
 
   const deliveryNote = deliverySignals ? describeDelivery(deliverySignals) : "";
