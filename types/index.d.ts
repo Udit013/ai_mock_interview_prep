@@ -226,6 +226,12 @@ interface AgentProps {
   companyMode?: string;
   // Coding interviews: returns the candidate's current editor contents.
   getCodeContext?: () => CodeContextPayload | null;
+  /** Slim voice-bar rendering for the split-screen coding layout. */
+  compact?: boolean;
+  /** Fires when the interview starts/stops so parents can gate controls. */
+  onActiveChange?: (active: boolean) => void;
+  /** Which seed question the interviewer is currently on. */
+  onActiveQuestionChange?: (index: number) => void;
 }
 
 interface RouteParams {

@@ -106,6 +106,7 @@ export async function POST(request: Request) {
       aiResponse: turn.spokenResponse.trim(),
       interviewState: turn.updatedState,
       action: turn.action,
+      activeQuestionIndex: turn.activeQuestionIndex,
       exchangeCount: answersGiven,
       isFinished,
     });

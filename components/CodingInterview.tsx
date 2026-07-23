@@ -3,6 +3,7 @@
 import { useCallback, useRef, useState } from "react";
 import Agent from "@/components/Agent";
 import CodingPanel, { type CodingLanguage } from "@/components/CodingPanel";
+import ProblemPanel from "@/components/ProblemPanel";
 
 export const CODE_SUBMIT_EVENT = "prepwise:submit-code";
 
@@ -18,14 +19,18 @@ interface CodingInterviewProps {
 }
 
 /**
- * Composes the voice Agent with a live Monaco editor. The interviewer sees the
- * candidate's current code with every turn (like a shared CoderPad), and
- * "Submit code for review" asks for an explicit review pass.
+ * Split-screen coding round: the problem and a slim voice bar on the left, the
+ * editor and output console on the right. The interviewer sees the candidate's
+ * current code with every turn, like a shared CoderPad.
  */
 const CodingInterview = (props: CodingInterviewProps) => {
   const codeRef = useRef("");
   const languageRef = useRef<CodingLanguage>("javascript");
   const [language, setLanguage] = useState<CodingLanguage>("javascript");
+  const [interviewActive, setInterviewActive] = useState(false);
+  // Which problem is on screen — follows the interviewer, overridable by the
+  // candidate via the problem selector.
+  const [viewedIndex, setViewedIndex] = useState(0);
 
   const getCodeContext = useCallback(() => {
     // Ignore untouched starter comments — no signal for the interviewer.
@@ -39,10 +44,20 @@ const CodingInterview = (props: CodingInterviewProps) => {
     };
   }, []);
 
+  // Keep the on-screen problem in step with whatever the interviewer moved to.
+  const handleActiveQuestionChange = useCallback((index: number) => {
+    setViewedIndex(index);
+  }, []);
+
   return (
-    <div className="grid gap-6 lg:grid-cols-[1fr_1.2fr] items-start">
-      {/* Agent renders a fragment; wrap it so it stays one grid item. */}
-      <div className="flex flex-col gap-6">
+    <div className="grid gap-6 lg:grid-cols-[minmax(320px,26rem)_1fr] items-start">
+      <div className="flex flex-col gap-4 lg:sticky lg:top-6">
+        <ProblemPanel
+          questions={props.questions}
+          activeIndex={viewedIndex}
+          onSelect={setViewedIndex}
+        />
+
         <Agent
           userName={props.userName}
           userId={props.userId}
@@ -55,6 +70,9 @@ const CodingInterview = (props: CodingInterviewProps) => {
           interviewType="Coding"
           companyMode={props.companyMode}
           getCodeContext={getCodeContext}
+          compact
+          onActiveChange={setInterviewActive}
+          onActiveQuestionChange={handleActiveQuestionChange}
         />
       </div>
 
@@ -70,7 +88,7 @@ const CodingInterview = (props: CodingInterviewProps) => {
         onSubmit={() => {
           window.dispatchEvent(new CustomEvent(CODE_SUBMIT_EVENT));
         }}
-        submitDisabled={false}
+        interviewActive={interviewActive}
       />
     </div>
   );

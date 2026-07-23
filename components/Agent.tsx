@@ -63,7 +63,11 @@ const Agent = ({
   interviewType,
   companyMode,
   getCodeContext,
+  compact = false,
+  onActiveChange,
+  onActiveQuestionChange,
 }: AgentProps) => {
+  const isCoding = interviewType === "Coding";
   const router = useRouter();
   const [callStatus, setCallStatus] = useState<CallStatus>(CallStatus.INACTIVE);
   const [isSpeaking, setIsSpeaking] = useState(false);
@@ -95,7 +99,9 @@ const Agent = ({
 
   useEffect(() => {
     statusRef.current = callStatus;
-  }, [callStatus]);
+    // Let the coding layout enable/disable "Submit for review" correctly.
+    onActiveChange?.(callStatus === CallStatus.ACTIVE);
+  }, [callStatus, onActiveChange]);
 
   useEffect(() => {
     if (messages.length > 0) {
@@ -271,6 +277,9 @@ const Agent = ({
         if (typeof data.exchangeCount === "number") {
           exchangeCountRef.current = data.exchangeCount;
         }
+        if (typeof data.activeQuestionIndex === "number") {
+          onActiveQuestionChange?.(data.activeQuestionIndex);
+        }
 
         setIsProcessing(false);
         await speakText(data.aiResponse);
@@ -285,7 +294,17 @@ const Agent = ({
         toast.error("Connection error. Please check your internet.");
       }
     },
-    [questions, role, level, interviewType, companyMode, getCodeContext, speakText, startListening]
+    [
+      questions,
+      role,
+      level,
+      interviewType,
+      companyMode,
+      getCodeContext,
+      onActiveQuestionChange,
+      speakText,
+      startListening,
+    ]
   );
 
   // ── Coding interviews: explicit "review my code" requests ───────────────────
@@ -296,6 +315,9 @@ const Agent = ({
       // Stop listening/speaking and run a review turn with the current code.
       recognitionRef.current?.abort();
       window.speechSynthesis.cancel();
+      // A code submission isn't a spoken answer — don't let the previous
+      // answer's delivery profile colour the interviewer's reaction.
+      lastSignalsRef.current = null;
       handleUserAnswer(
         "I've just submitted my code for review — please take a look and share your thoughts."
       );
@@ -358,27 +380,34 @@ const Agent = ({
     answerDurationsRef.current = [];
     setMessages([]);
 
-    // Speak the opening + first question
-    const opening =
-      `Hello ${userName}! Welcome to your mock interview. ` +
-      `I'll be asking you ${questions.length} questions today. ` +
-      `Take your time with each answer. Let's get started. ` +
-      `Here's your first question: ${questions[0]}`;
+    // Coding rounds show the problem on screen, so never read it aloud.
+    const spokenOpening = isCoding
+      ? `Hi ${userName}, welcome. The problem is on your screen — take a moment to read it. ` +
+        `When you're ready, walk me through your approach before you start coding.`
+      : `Hello ${userName}! Welcome to your mock interview. ` +
+        `I'll be asking you ${questions.length} questions today. ` +
+        `Take your time with each answer. Let's get started. ` +
+        `Here's your first question: ${questions[0]}`;
+
+    // The transcript still records the problem so feedback and replay have it.
+    const recordedOpening = isCoding
+      ? `${spokenOpening}\n\n[Problem shown on screen]: ${questions[0] ?? ""}`
+      : spokenOpening;
 
     const openingMsg: SavedMessage = {
       role: "assistant",
-      content: opening,
+      content: recordedOpening,
     };
     setMessages([openingMsg]);
     messagesRef.current = [openingMsg];
 
     setCallStatus(CallStatus.ACTIVE);
-    await speakText(opening);
+    await speakText(spokenOpening);
 
     if (statusRef.current === CallStatus.ACTIVE) {
       startListening(handleUserAnswer);
     }
-  }, [userName, questions, speakText, startListening, handleUserAnswer]);
+  }, [userName, questions, isCoding, speakText, startListening, handleUserAnswer]);
 
   // ── End interview early ──────────────────────────────────────────────────────
   const handleEnd = useCallback(() => {
@@ -401,6 +430,85 @@ const Agent = ({
     : callStatus === CallStatus.ACTIVE
     ? "Your turn"
     : "";
+
+  const controlButton =
+    callStatus !== CallStatus.ACTIVE ? (
+      <button
+        className="relative btn-call"
+        onClick={handleStart}
+        disabled={
+          callStatus === CallStatus.CONNECTING ||
+          callStatus === CallStatus.FINISHED
+        }
+      >
+        <span
+          className={cn(
+            "absolute animate-ping rounded-full opacity-75",
+            callStatus !== CallStatus.CONNECTING && "hidden"
+          )}
+        />
+        <span>
+          {callStatus === CallStatus.FINISHED
+            ? "Done"
+            : callStatus === CallStatus.CONNECTING
+            ? ". . ."
+            : "Start"}
+        </span>
+      </button>
+    ) : (
+      <button className="btn-disconnect" onClick={handleEnd}>
+        End Interview
+      </button>
+    );
+
+  // Compact layout: a slim voice bar for the split-screen coding interview.
+  if (compact) {
+    return (
+      <div className="flex flex-col gap-3 rounded-2xl border border-dark-300 bg-dark-200/40 p-4">
+        <div className="flex items-center gap-3">
+          <div className="relative shrink-0">
+            <Image
+              src="/ai-avatar.png"
+              alt="AI Interviewer"
+              width={40}
+              height={40}
+              className="rounded-full object-cover size-10 bg-dark-300 p-1.5"
+            />
+            {(isSpeaking || isProcessing) && (
+              <span className="absolute -bottom-0.5 -right-0.5 size-3 rounded-full bg-primary-200 animate-pulse" />
+            )}
+          </div>
+
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-semibold">AI Interviewer</p>
+            <p className="text-xs text-light-400">
+              {statusLabel || "Not started"}
+            </p>
+          </div>
+
+          {isListening && (
+            <span className="text-xs text-success-100 animate-pulse shrink-0">
+              🎤 Listening
+            </span>
+          )}
+        </div>
+
+        {displayText && (
+          <p
+            key={displayText}
+            className={cn(
+              "max-h-28 overflow-y-auto rounded-lg bg-dark-300/50 p-3 text-sm leading-relaxed",
+              interimTranscript && "italic text-light-400"
+            )}
+          >
+            {displayText}
+          </p>
+        )}
+
+        <div className="flex justify-center">{controlButton}</div>
+      </div>
+    );
+  }
 
   return (
     <>
@@ -461,32 +569,7 @@ const Agent = ({
         </div>
       )}
 
-      <div className="w-full flex justify-center">
-        {callStatus !== CallStatus.ACTIVE ? (
-          <button
-            className="relative btn-call"
-            onClick={handleStart}
-            disabled={
-              callStatus === CallStatus.CONNECTING ||
-              callStatus === CallStatus.FINISHED
-            }
-          >
-            <span
-              className={cn(
-                "absolute animate-ping rounded-full opacity-75",
-                callStatus !== CallStatus.CONNECTING && "hidden"
-              )}
-            />
-            <span>
-              {callStatus === CallStatus.FINISHED ? "Done" : callStatus === CallStatus.CONNECTING ? ". . ." : "Start"}
-            </span>
-          </button>
-        ) : (
-          <button className="btn-disconnect" onClick={handleEnd}>
-            End Interview
-          </button>
-        )}
-      </div>
+      <div className="w-full flex justify-center">{controlButton}</div>
     </>
   );
 };
