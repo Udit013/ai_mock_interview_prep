@@ -16,7 +16,7 @@ A full-stack, AI-powered interview platform that conducts **adaptive voice inter
 - **Adaptive Voice Interview** — Browser-native speech recognition captures your answers and text-to-speech asks questions aloud. The interviewer **adapts in real time**: strong answers raise difficulty, weak answers trigger follow-ups, missing fundamentals get probed, and unclear answers get clarifying questions.
 - **Human-like delivery awareness** — the browser measures how you answered (hesitation before speaking, pace, filler density, answer length) and the interviewer reacts like a person: long pauses get *"No worries, take your time"* and a gentler probe; composed, fast depth gets pushed harder. Delivery also feeds the interviewer's running confidence estimate.
 - **Five interview formats** — Technical, Behavioral, Mixed, **System Design** (requirements → scale estimation → trade-offs → bottlenecks), and **Coding** with a live editor.
-- **Live Coding Interviews (Monaco)** — a CoderPad-style split view: voice interviewer on one side, VS Code's Monaco editor (JS/Python/Java/C++) on the other. The interviewer sees your current code with every turn, and "Submit code for review" triggers a spoken code review that catches real bugs and probes complexity and testing. *(Deliberately no code execution: interviews evaluate reasoning, and sandboxing arbitrary code isn't safe on this stack.)*
+- **Live Coding Interviews (Monaco)** — a CoderPad-style split view: the problem statement and a compact voice interviewer on one side, VS Code's Monaco editor (JS/Python/Java/C++) on the other. The problem is always **read on screen, never recited aloud** — the interviewer refers to it in passing and moves straight to discussion. **Run** actually executes JavaScript and Python client-side in a terminable Web Worker sandbox (isolated from the DOM, killed on infinite loops instead of freezing the tab; Python runs on lazily-loaded Pyodide/WASM). **Submit code for review** triggers a spoken review that reads your real code, catches bugs, and probes complexity and testing — reliably gated so it only fires once the interview is live.
 - **Company Interview Modes** — config-driven templates for Google, Amazon (Leadership Principles), Meta, Microsoft, Stripe, McKinsey (PEI), Bain, BCG, and Deloitte that shape the interviewer's persona, question emphasis, and evaluation criteria.
 - **AI Feedback Report** — Scored across 5 dimensions (Communication, Technical Knowledge, Problem Solving, Cultural Fit, Confidence) with strengths, areas for improvement, STAR-method completeness, and an overall assessment — all Zod-validated.
 - **Interview Replay** — every completed interview persists its transcript; watch it back as an animated chat timeline (play/pause/skip), including your submitted code for coding rounds. Owner-only.
@@ -57,6 +57,7 @@ A full-stack, AI-powered interview platform that conducts **adaptive voice inter
 | AI | Google **Gemini 2.5 Flash** (`@ai-sdk/google`, Vercel AI SDK) |
 | Voice I/O | Web Speech API (SpeechRecognition + SpeechSynthesis) |
 | Code editor | Monaco (`@monaco-editor/react`, lazy-loaded on the coding page only) |
+| Code execution | In-browser Web Worker sandbox (JS) + Pyodide/WASM (Python), lazy-loaded |
 | PDF parsing | `unpdf` |
 | Validation | Zod (all AI outputs) |
 | Forms | react-hook-form |
@@ -88,6 +89,9 @@ app/
 
 components/
 ├── Agent.tsx                     # Voice engine (Web Speech API) + adaptive loop
+│                                  #   (compact mode for the split coding layout)
+├── CodingPanel.tsx                # Monaco editor + Run/Submit + output console
+├── ProblemPanel.tsx               # On-screen problem statement (never recited)
 ├── InterviewForm.tsx             # Manual / résumé modes + visibility toggle
 ├── InterviewCard.tsx             # Cards with score + visibility badge
 └── dashboard/ProgressOverview.tsx# SVG stat cards / trend / competency bars
@@ -97,6 +101,7 @@ lib/
 │   ├── resume.ts                 # résumé Zod schema + Gemini structuring
 │   └── adaptive.ts               # interview state + adaptive turn engine
 ├── analytics/speaking.ts         # deterministic speaking metrics
+├── runner/code-runner.ts         # Web Worker + Pyodide sandbox (terminable)
 ├── actions/
 │   ├── interview.action.ts       # Firestore CRUD + Gemini feedback
 │   ├── analytics.action.ts       # progress aggregation
@@ -167,6 +172,7 @@ npm run dev   # http://localhost:3000
 - **Adaptive engine** — interview flow is server-driven via a single Zod-validated Gemini call per turn; seed questions form the backbone while difficulty and follow-ups adapt around them. Termination is enforced deterministically, never left to the model.
 - **No server-only code in the client** — `Agent.tsx` keeps a local `InterviewState` default and imports only pure helpers, so AI SDK packages never enter the client bundle.
 - **Deterministic analytics** — filler words / WPM / duration are computed in the browser (word-boundary safe), keeping coaching metrics free and explainable; only STAR judgment uses the model.
+- **Terminable code execution** — code runs inside a Web Worker so an infinite loop can be killed (`worker.terminate()`) instead of hanging the tab; the same isolation means the sandbox never touches the DOM, cookies, or app state.
 - **Dependency-free charts** — the progress dashboard uses hand-built SVG, adding zero client JS.
 - **Privacy by default for résumé interviews** — `visibility` filtering keeps personal interviews out of the community feed; older docs without the field remain public for backward compatibility.
 - **Index-free Firestore queries** — single-field `where` filters with client-side sort/filter avoid composite-index requirements.
@@ -180,13 +186,14 @@ All schema changes are **additive and backward-compatible**:
 - `Interview.source`, `Interview.visibility`, and `Interview.companyMode` are optional; existing docs without them load fine (treated as public, manual, generic).
 - `Feedback.speakingAnalytics`, `starCompleteness`, `transcript`, `finalCode`, and `shareToken` are optional; older feedback renders without those sections (no transcript → no replay link).
 - New collections: `resumes/{uid}` (first résumé upload) and `rateLimits` (transactional daily counters).
+- `adaptiveTurnSchema` gained `activeQuestionIndex` (server-computed, non-breaking) so the coding UI can track which problem the interviewer is discussing.
 
-No environment variables were added.
+No environment variables were added. No database schema changes for the code-execution/layout update — it's entirely client-side.
 
 ## Deliberately Not Built
 - **Barge-in interruptions** — the Web Speech recognizer picks up the app's own text-to-speech through the mic (no reliable echo cancellation), causing false triggers. Fake realism that degrades UX.
 - **Leaderboards** — privacy-sensitive, gameable, and empty-looking at small scale.
-- **Code execution** — running untrusted code requires sandbox infrastructure out of scope for a free serverless stack; the interviewer reviews code the way a human does instead.
+- **Compiled-language execution (Java/C++)** — running these client-side would need a WASM toolchain far heavier than Pyodide for marginal benefit; the interviewer reviews Java/C++ code the way a human does instead, same as it always has for logic and correctness.
 
 ---
 
