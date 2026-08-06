@@ -1,7 +1,16 @@
 import React from "react";
+import type { Metadata } from "next";
 import Link from "next/link";
-import { getFeedbackByShareToken } from "@/lib/actions/interview.action";
+import { getFeedbackByShareToken } from "@/lib/data/interview.data";
 import { cn } from "@/lib/utils";
+
+// A share link is "unlisted", not public: anyone holding the token may read it,
+// but it must never end up in a search index. Without this, a single link
+// posted anywhere would make the report permanently discoverable — and revoking
+// the token would not remove it from search results.
+export const metadata: Metadata = {
+  robots: { index: false, follow: false, nocache: true },
+};
 
 // Public, read-only candidate report. Reachable only via an unguessable
 // owner-minted token; revoking the token 404s this page.

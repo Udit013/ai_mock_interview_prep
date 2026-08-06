@@ -103,6 +103,9 @@ interface Interview {
   visibility?: "public" | "private";
   // Company template id (e.g. "google", "amazon", "mckinsey").
   companyMode?: string;
+  // Cover art chosen once at creation time and persisted, so a card doesn't
+  // change picture on every render.
+  coverImage?: string;
 }
 
 // ── Phase 5: Progress Dashboard ───────────────────────────────────────────────
@@ -204,6 +207,7 @@ interface InterviewCardProps {
   createdAt?: string;
   feedback?: Feedback | null;
   visibility?: "public" | "private";
+  coverImage?: string;
 }
 
 interface CodeContextPayload {

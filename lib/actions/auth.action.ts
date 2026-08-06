@@ -67,7 +67,10 @@ export async function signIn(params: SignInParams) {
     }
 }
 
-export async function setSessionCookie(idToken: string) {
+// Not exported: every export of a "use server" module is a public RPC endpoint,
+// and this one mints a session from a raw ID token. Keeping it module-private
+// forces callers to go through signIn(), which verifies the user first.
+async function setSessionCookie(idToken: string) {
     const cookieStore = await cookies();
 
     const sessionCookie = await auth.createSessionCookie(idToken, {

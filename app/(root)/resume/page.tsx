@@ -1,7 +1,7 @@
 import React from "react";
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/actions/auth.action";
-import { getResumeByUserId } from "@/lib/actions/resume.action";
+import { getResumeByUserId } from "@/lib/data/resume.data";
 import ResumeCoach from "@/components/ResumeCoach";
 import ResumeUpload from "@/components/ResumeUpload";
 

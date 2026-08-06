@@ -19,7 +19,9 @@ const authFormSchema = (type: FormType) => {
     return z.object({
         name: type === 'sign-up' ? z.string().min(3) : z.string().optional(),
         email: z.string().email(),
-        password: z.string().min(3),
+        // Firebase rejects anything under 6 characters server-side; matching it
+        // here fails fast with a clear message instead of a raw Firebase error.
+        password: z.string().min(6, 'Password must be at least 6 characters'),
     })
 }
 

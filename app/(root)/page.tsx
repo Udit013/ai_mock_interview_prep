@@ -9,19 +9,21 @@ import {
   getInterviewsByUserId,
   getLatestInterviews,
   getFeedbackByUserId,
-} from "@/lib/actions/interview.action";
-import { getUserProgress } from "@/lib/actions/analytics.action";
+} from "@/lib/data/interview.data";
+import { computeProgress } from "@/lib/analytics/progress";
 
 const Page = async () => {
   const user = await getCurrentUser();
 
-  const [userInterviews, latestInterviews, userFeedback, progress] =
-    await Promise.all([
-      getInterviewsByUserId(user?.id ?? ""),
-      getLatestInterviews({ userId: user?.id ?? "", limit: 20 }),
-      getFeedbackByUserId(user?.id ?? ""),
-      getUserProgress(user?.id ?? ""),
-    ]);
+  const [userInterviews, latestInterviews, userFeedback] = await Promise.all([
+    getInterviewsByUserId(user?.id ?? ""),
+    getLatestInterviews({ userId: user?.id ?? "", limit: 20 }),
+    getFeedbackByUserId(user?.id ?? ""),
+  ]);
+
+  // Derived from the feedback we already fetched — previously this called
+  // getUserProgress(), which re-queried the entire feedback collection.
+  const progress = computeProgress(userFeedback);
 
   // Map each of the user's interviews to its feedback (fixes cards always
   // showing "not taken yet").
@@ -74,6 +76,7 @@ const Page = async () => {
                 type={interview.type}
                 techstack={interview.techstack}
                 createdAt={interview.createdAt}
+                coverImage={interview.coverImage}
                 feedback={feedbackByInterview.get(interview.id) ?? null}
                 visibility={interview.visibility ?? "public"}
               />
@@ -103,6 +106,7 @@ const Page = async () => {
                 type={interview.type}
                 techstack={interview.techstack}
                 createdAt={interview.createdAt}
+                coverImage={interview.coverImage}
               />
             ))
           ) : (

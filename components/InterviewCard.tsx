@@ -5,8 +5,11 @@ import {Button} from "@/components/ui/button";
 import Link from "next/link";
 import DisplayTechIcons from "@/components/DisplayTechIcons";
 
-const InterviewCard = ({ interviewId, userId, role, type, techstack, createdAt, feedback = null, visibility }: InterviewCardProps) => {
+const InterviewCard = ({ interviewId, userId, role, type, techstack, createdAt, feedback = null, visibility, coverImage }: InterviewCardProps) => {
     const normalizedType = /mix/gi.test(type) ? 'Mixed' : type;
+    // Use the cover persisted at creation time; only fall back to a random one
+    // for legacy documents that predate the stored field.
+    const cover = coverImage ?? getRandomInterviewCover();
     const formattedDate = dayjs(feedback?.createdAt || createdAt || Date.now()).format('MMM D, YYYY');
     const isPrivate = visibility === 'private';
 
@@ -18,7 +21,7 @@ const InterviewCard = ({ interviewId, userId, role, type, techstack, createdAt, 
                       <p className="badge-text">{normalizedType}</p>
                   </div>
 
-                  <Image src={getRandomInterviewCover()} alt="cover image" width={90} height={90} className="rounded-full object-fit size-[90px]" />
+                  <Image src={cover} alt="" width={90} height={90} className="rounded-full object-fit size-[90px]" />
 
                   {visibility && (
                       <span
