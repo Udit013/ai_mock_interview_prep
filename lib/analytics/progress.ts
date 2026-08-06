@@ -1,7 +1,13 @@
-"use server";
+/**
+ * Pure progress aggregation over already-fetched feedback.
+ *
+ * Deliberately free of any Firebase import: keeping the computation separate
+ * from the fetch means it can be unit-tested without credentials, and lets the
+ * dashboard derive progress from feedback it has already loaded instead of
+ * querying the collection a second time.
+ */
 
 import dayjs from "dayjs";
-import { getFeedbackByUserId } from "@/lib/actions/interview.action";
 
 const EMPTY_PROGRESS: UserProgress = {
   totalInterviews: 0,
@@ -43,13 +49,11 @@ const avg = (nums: number[]) =>
   nums.length ? nums.reduce((s, n) => s + n, 0) / nums.length : 0;
 
 /**
- * Aggregate a user's feedback history into a progress summary for the
- * coaching-hub dashboard. All computation is in-app over existing feedback docs.
+ * Aggregate a user's feedback history into a progress summary. Pure: no I/O,
+ * so it can be unit-tested and reused by callers that already hold the data.
  */
-export async function getUserProgress(userId: string): Promise<UserProgress> {
-  if (!userId) return EMPTY_PROGRESS;
-
-  const feedbacks = (await getFeedbackByUserId(userId))
+export function computeProgress(allFeedback: Feedback[]): UserProgress {
+  const feedbacks = allFeedback
     .filter((f) => typeof f.totalScore === "number")
     .sort(
       (a, b) =>

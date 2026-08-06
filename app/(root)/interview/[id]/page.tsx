@@ -9,7 +9,7 @@ import { getCurrentUser } from "@/lib/actions/auth.action";
 import {
   getInterviewById,
   getFeedbackByInterviewId,
-} from "@/lib/actions/interview.action";
+} from "@/lib/data/interview.data";
 
 const Page = async ({ params }: RouteParams) => {
   const { id } = await params;

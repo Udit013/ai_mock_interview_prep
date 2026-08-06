@@ -1,49 +1,23 @@
 "use server";
 
-import { db } from "@/firebase/admin";
+/**
+ * SECURITY: every export here is a publicly callable RPC endpoint. Persistence
+ * helpers that accept a `userId` live in `lib/data/resume.data.ts` instead, so
+ * they cannot be invoked directly by a caller supplying someone else's id.
+ */
+
 import {
   generateResumeImprovements,
-  type ResumeSchema,
   type ResumeImprovements,
 } from "@/lib/ai/resume";
+import { getResumeByUserId } from "@/lib/data/resume.data";
 import { getCurrentUser } from "@/lib/actions/auth.action";
 import { checkRateLimit, RATE_LIMITS } from "@/lib/rate-limit";
 
 /**
- * Persist (or overwrite) the latest parsed resume for a user. We keep a single
- * document per user keyed by userId so "Generate from resume" always uses the
- * most recent upload.
- */
-export async function saveResume({
-  userId,
-  parsed,
-  rawTextLength,
-}: {
-  userId: string;
-  parsed: ResumeSchema;
-  rawTextLength: number;
-}): Promise<{ success: boolean }> {
-  try {
-    await db
-      .collection("resumes")
-      .doc(userId)
-      .set({
-        userId,
-        ...parsed,
-        rawTextLength,
-        createdAt: new Date().toISOString(),
-      });
-
-    return { success: true };
-  } catch (e) {
-    console.error("saveResume error:", e);
-    return { success: false };
-  }
-}
-
-/**
- * Coaching suggestions for the caller's stored résumé. Session-derived
- * identity; rate-limited because it drives a Gemini call.
+ * Coaching suggestions for the caller's stored résumé. Takes no arguments by
+ * design: the user is derived from the session, so it is structurally
+ * impossible to request coaching on someone else's résumé.
  */
 export async function suggestResumeImprovements(): Promise<
   | { success: true; improvements: ResumeImprovements }
@@ -65,39 +39,25 @@ export async function suggestResumeImprovements(): Promise<
       };
     }
 
-    const doc = await db.collection("resumes").doc(user.id).get();
-    if (!doc.exists) {
+    const resume = await getResumeByUserId(user.id);
+    if (!resume) {
       return {
         success: false,
         error: "No résumé on file — upload one from the interview page first.",
       };
     }
 
-    const data = doc.data() as Resume;
     const improvements = await generateResumeImprovements({
-      summary: data.summary,
-      skills: data.skills,
-      projects: data.projects,
-      experiences: data.experiences,
-      technologies: data.technologies,
+      summary: resume.summary,
+      skills: resume.skills,
+      projects: resume.projects,
+      experiences: resume.experiences,
+      technologies: resume.technologies,
     });
 
     return { success: true, improvements };
   } catch (e) {
     console.error("suggestResumeImprovements error:", e);
     return { success: false, error: "Failed to generate suggestions." };
-  }
-}
-
-export async function getResumeByUserId(
-  userId: string
-): Promise<Resume | null> {
-  try {
-    const doc = await db.collection("resumes").doc(userId).get();
-    if (!doc.exists) return null;
-    return { id: doc.id, ...doc.data() } as Resume;
-  } catch (e) {
-    console.error("getResumeByUserId error:", e);
-    return null;
   }
 }

@@ -5,7 +5,7 @@ import { getCurrentUser } from "@/lib/actions/auth.action";
 import {
   getInterviewById,
   getFeedbackByInterviewId,
-} from "@/lib/actions/interview.action";
+} from "@/lib/data/interview.data";
 import ReplayPlayer from "@/components/ReplayPlayer";
 import { Button } from "@/components/ui/button";
 

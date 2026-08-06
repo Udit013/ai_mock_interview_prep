@@ -85,6 +85,8 @@ const Agent = ({
   // Phase 4: per-answer speaking durations (seconds) for analytics.
   const answerStartRef = useRef(0);
   const answerDurationsRef = useRef<number[]>([]);
+  // Only actually-spoken answers, kept in step with answerDurationsRef.
+  const spokenTurnsRef = useRef<string[]>([]);
   // Realism: when the candidate actually started speaking (vs. listening start)
   // and the delivery profile of their last answer.
   const firstSpeechAtRef = useRef<number | null>(null);
@@ -108,6 +110,16 @@ const Agent = ({
       setLastMessage(messages[messages.length - 1].content);
     }
   }, [messages]);
+
+  // Release the microphone and stop speech if the component unmounts mid-
+  // interview (e.g. the user navigates away). Without this the recognizer
+  // keeps listening and the interviewer keeps talking on the next page.
+  useEffect(() => {
+    return () => {
+      recognitionRef.current?.abort();
+      if (typeof window !== "undefined") window.speechSynthesis.cancel();
+    };
+  }, []);
 
   // ── Text-to-Speech ──────────────────────────────────────────────────────────
   const speakText = useCallback((text: string): Promise<void> => {
@@ -200,6 +212,10 @@ const Agent = ({
           // Delivery profile for the adaptive interviewer: how long they
           // hesitated before speaking, and how the answer was delivered.
           const text = interim.trim();
+          // Only genuinely spoken turns feed speaking analytics — synthetic
+          // messages (e.g. the code-submission prompt) must not inflate the
+          // word count or skew words-per-minute.
+          if (text) spokenTurnsRef.current.push(text);
           const spokeAt = firstSpeechAtRef.current ?? now;
           lastSignalsRef.current = {
             hesitationSeconds: Math.min(
@@ -336,12 +352,11 @@ const Agent = ({
     }
 
     const finish = async () => {
-      // Phase 4: compute speaking analytics from the candidate's spoken turns.
-      const candidateTurns = messagesRef.current
-        .filter((m) => m.role === "user")
-        .map((m) => m.content);
+      // Phase 4: compute speaking analytics from genuinely spoken turns only
+      // (messagesRef also contains synthetic entries like the code-submission
+      // prompt, which the candidate never said out loud).
       const speakingAnalytics = analyzeSpeaking(
-        candidateTurns,
+        spokenTurnsRef.current,
         answerDurationsRef.current
       );
 
@@ -378,6 +393,7 @@ const Agent = ({
     interviewStateRef.current = DEFAULT_INTERVIEW_STATE;
     exchangeCountRef.current = 0;
     answerDurationsRef.current = [];
+    spokenTurnsRef.current = [];
     setMessages([]);
 
     // Coding rounds show the problem on screen, so never read it aloud.

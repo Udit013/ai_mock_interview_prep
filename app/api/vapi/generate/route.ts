@@ -160,9 +160,15 @@ Return ONLY a JSON array of strings, like:
       .replace(/```$/i, "")
       .trim();
 
+    // Validate the shape, not just that it parsed: the model sometimes returns
+    // an object wrapper or nested arrays, which would previously be stored
+    // as-is and break the interview page at render time.
     let parsedQuestions: string[];
     try {
-      parsedQuestions = JSON.parse(cleaned);
+      parsedQuestions = z
+        .array(z.string().min(1).max(2000))
+        .min(1)
+        .parse(JSON.parse(cleaned));
     } catch {
       throw new Error("Failed to parse questions returned by the AI model.");
     }
@@ -199,10 +205,17 @@ Return ONLY a JSON array of strings, like:
 
     return Response.json({ success: true }, { status: 200 });
   } catch (error) {
+    // Log the real cause server-side, but never return it: upstream provider
+    // errors can carry project ids, quota details, and internal paths.
     console.error("generate interview error:", error);
 
-    const message =
-      error instanceof Error ? error.message : "Failed to generate interview.";
-    return Response.json({ success: false, error: message }, { status: 500 });
+    return Response.json(
+      {
+        success: false,
+        error:
+          "Couldn't generate the interview right now. Please try again in a moment.",
+      },
+      { status: 500 }
+    );
   }
 }

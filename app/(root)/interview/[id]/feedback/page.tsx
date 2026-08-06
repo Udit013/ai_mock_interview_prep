@@ -7,7 +7,7 @@ import { getCurrentUser } from "@/lib/actions/auth.action";
 import {
   getInterviewById,
   getFeedbackByInterviewId,
-} from "@/lib/actions/interview.action";
+} from "@/lib/data/interview.data";
 import { Button } from "@/components/ui/button";
 import ShareFeedbackButton from "@/components/ShareFeedbackButton";
 import { cn } from "@/lib/utils";

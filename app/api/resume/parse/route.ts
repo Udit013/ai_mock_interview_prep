@@ -1,6 +1,6 @@
 import { extractText, getDocumentProxy } from "unpdf";
 import { structureResume, ResumeTooShortError } from "@/lib/ai/resume";
-import { saveResume } from "@/lib/actions/resume.action";
+import { saveResume } from "@/lib/data/resume.data";
 import { getCurrentUser } from "@/lib/actions/auth.action";
 import { checkRateLimit, RATE_LIMITS } from "@/lib/rate-limit";
 
