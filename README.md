@@ -14,6 +14,8 @@ A full-stack, AI-powered interview platform that conducts **adaptive voice inter
 
 ### Core
 - **Adaptive Voice Interview** — Browser-native speech recognition captures your answers and text-to-speech asks questions aloud. The interviewer **adapts in real time**: strong answers raise difficulty, weak answers trigger follow-ups, missing fundamentals get probed, and unclear answers get clarifying questions.
+- **Handles "I don't know" gracefully** — when you clearly can't answer, the interview moves on instantly: a warm acknowledgement and the next question, with no re-asking and no waiting on the model. Conservative by design — *"I don't know the exact number, but I'd estimate ~50ms"* counts as a real answer.
+- **Resilient speech-to-text** — continuous recognition survives natural pauses, answers accumulate instead of being overwritten, and Chrome's periodic auto-stop is restarted transparently. The transcript is **editable before you send it**, and if the mic is blocked or unsupported you can simply type.
 - **Human-like delivery awareness** — the browser measures how you answered (hesitation before speaking, pace, filler density, answer length) and the interviewer reacts like a person: long pauses get *"No worries, take your time"* and a gentler probe; composed, fast depth gets pushed harder. Delivery also feeds the interviewer's running confidence estimate.
 - **Five interview formats** — Technical, Behavioral, Mixed, **System Design** (requirements → scale estimation → trade-offs → bottlenecks), and **Coding** with a live editor.
 - **Live Coding Interviews (Monaco)** — a CoderPad-style split view: the problem statement and a compact voice interviewer on one side, VS Code's Monaco editor (JS/Python/Java/C++) on the other. The problem is always **read on screen, never recited aloud** — the interviewer refers to it in passing and moves straight to discussion. **Run** actually executes JavaScript and Python client-side in a terminable Web Worker sandbox (isolated from the DOM, killed on infinite loops instead of freezing the tab; Python runs on lazily-loaded Pyodide/WASM). **Submit code for review** triggers a spoken review that reads your real code, catches bugs, and probes complexity and testing — reliably gated so it only fires once the interview is live.
@@ -59,7 +61,7 @@ A full-stack, AI-powered interview platform that conducts **adaptive voice inter
 | Code editor | Monaco (`@monaco-editor/react`, lazy-loaded on the coding page only) |
 | Code execution | In-browser Web Worker sandbox (JS) + Pyodide/WASM (Python), lazy-loaded |
 | PDF parsing | `unpdf` |
-| Validation | Zod (all AI outputs) |
+| Validation | Zod (all AI outputs and request bodies) |
 | Forms | react-hook-form |
 | Charts | Hand-built SVG (no chart library) |
 | Deployment | Vercel |

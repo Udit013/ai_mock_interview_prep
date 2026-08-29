@@ -7,6 +7,19 @@ import { getCurrentUser } from "@/lib/actions/auth.action";
 import { resumeSchema, type ResumeSchema } from "@/lib/ai/resume";
 import { checkRateLimit, RATE_LIMITS } from "@/lib/rate-limit";
 import { getCompanyMode, companyPromptBlock } from "@/constants/companies";
+import {
+  sanitizeQuestions,
+  meetsMinimumCount,
+} from "@/lib/interview/question-quality";
+
+/**
+ * An error whose message is safe (and useful) to show the user. Everything else
+ * is logged server-side and reported generically, since upstream provider
+ * errors can carry project ids and quota details.
+ */
+class QuestionGenerationError extends Error {
+  readonly userFacing = true;
+}
 
 export async function GET() {
   return Response.json({ success: true, data: "THANK YOU!" }, { status: 200 });
@@ -109,6 +122,8 @@ export async function POST(request: Request) {
     const company = getCompanyMode(companyMode);
     const companyBlock = companyPromptBlock(company?.id);
     const isResume = source === "resume" && resumeContext;
+    // Tech stack is optional — when absent the model infers what the role needs.
+    const hasTechstack = Boolean(techstack && techstack.trim());
 
     const typeInstructions =
       type === "Coding"
@@ -133,20 +148,27 @@ Good examples of resume-aware questions:
 The questions will be read aloud by a voice assistant, so do not use "/", "*", or other special characters.
 Return ONLY a JSON array of strings, like:
 ["Question 1", "Question 2", "Question 3"]`
-      : `Prepare questions for a job interview.
-        The job role is ${role}.
-        The job experience level is ${level}.
-        The tech stack used in the job is: ${techstack}.
-        The focus between behavioural and technical questions should lean towards: ${type}.
-        The amount of questions required is: ${amount}.
-        ${companyBlock}${typeInstructions}
-        Please return only the questions, without any additional text.
-        The questions are going to be read by a voice assistant so do not use "/" or "*" or any other special characters which might break the voice assistant.
-        Return the questions formatted like this:
-        ["Question 1", "Question 2", "Question 3"]
+      : `Prepare ${amount} interview questions for a job interview.
+The job role is ${role}.
+The job experience level is ${level}.
+${
+  hasTechstack
+    ? `The tech stack used in the job is: ${techstack}. Ground technical questions in this stack.`
+    : `No tech stack was specified. Infer the skills and tools a ${level} ${role} is actually expected to know, and ground technical questions in those. Do not ask the candidate which technologies they use — choose sensible ones for the role yourself.`
+}
+The focus between behavioural and technical questions should lean towards: ${type}.
+${companyBlock}${typeInstructions}
 
-        Thank you! <3
-    `;
+Quality requirements:
+- Every question must be distinct. Do not rephrase the same question twice.
+- Progress from foundational to more demanding across the set.
+- Each question must be answerable out loud in 2-4 minutes.
+- Be specific and concrete; avoid vague prompts like "tell me about your experience".
+- Do not number the questions or add commentary.
+
+The questions are going to be read by a voice assistant so do not use "/" or "*" or any other special characters which might break the voice assistant.
+Return ONLY a JSON array of strings, like:
+["Question 1", "Question 2", "Question 3"]`;
 
     const { text: questions } = await generateText({
       model: google("gemini-2.5-flash"),
@@ -163,14 +185,26 @@ Return ONLY a JSON array of strings, like:
     // Validate the shape, not just that it parsed: the model sometimes returns
     // an object wrapper or nested arrays, which would previously be stored
     // as-is and break the interview page at render time.
-    let parsedQuestions: string[];
+    let rawQuestions: unknown;
     try {
-      parsedQuestions = z
-        .array(z.string().min(1).max(2000))
-        .min(1)
-        .parse(JSON.parse(cleaned));
+      rawQuestions = JSON.parse(cleaned);
     } catch {
-      throw new Error("Failed to parse questions returned by the AI model.");
+      throw new QuestionGenerationError(
+        "The AI returned an unreadable response. Please try generating again."
+      );
+    }
+
+    // Strip numbering/bullets, drop fragments, and remove near-duplicates so a
+    // sloppy generation can't produce a repetitive or broken interview.
+    const { questions: parsedQuestions, issues } = sanitizeQuestions(rawQuestions);
+    if (issues.length > 0) {
+      console.warn("generate interview — question issues:", issues);
+    }
+
+    if (!meetsMinimumCount(parsedQuestions.length, amount)) {
+      throw new QuestionGenerationError(
+        "The AI didn't return enough usable questions. Please try again — adding a tech stack or a more specific role helps."
+      );
     }
 
     // For resume interviews with no explicit tech stack, derive it from the resume.
@@ -205,17 +239,15 @@ Return ONLY a JSON array of strings, like:
 
     return Response.json({ success: true }, { status: 200 });
   } catch (error) {
-    // Log the real cause server-side, but never return it: upstream provider
-    // errors can carry project ids, quota details, and internal paths.
+    // Log the real cause server-side, but only echo messages we authored:
+    // upstream provider errors can carry project ids and quota details.
     console.error("generate interview error:", error);
 
-    return Response.json(
-      {
-        success: false,
-        error:
-          "Couldn't generate the interview right now. Please try again in a moment.",
-      },
-      { status: 500 }
-    );
+    const message =
+      error instanceof QuestionGenerationError
+        ? error.message
+        : "Couldn't generate the interview right now. Please try again in a moment.";
+
+    return Response.json({ success: false, error: message }, { status: 500 });
   }
 }

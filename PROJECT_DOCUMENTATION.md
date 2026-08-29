@@ -69,6 +69,12 @@ Most AI interview tools evaluate the **transcript** — the words you said. Prep
 | Filler density | Count of "um", "like", "you know" ÷ total words | High rate → reads as unsure, probes gently |
 | Answer length | Word count + duration | Very short answer → asks for elaboration |
 
+## Two things that make it feel like a real interview
+
+**It moves on when you're stuck.** Say "I don't know" and the interview advances immediately — a warm acknowledgement and the next question, with no model round trip and no re-asking. The detector ([`lib/interview/non-answer.ts`](lib/interview/non-answer.ts)) is deliberately conservative: *"I don't know the exact number, but I'd estimate ~50ms"* is a real answer and is never skipped. It requires a short utterance, no continuation marker ("but", "I think", "maybe"), **and** a refusal pattern before it will skip.
+
+**It doesn't cut you off.** Speech recognition runs continuously so natural pauses don't end your answer; final segments accumulate rather than overwrite; a silence timer decides when you're actually done; and Chrome's periodic auto-stop is restarted transparently. The transcript is **editable before you send it**, so a mis-hearing is correctable — and if the mic is blocked or unsupported, you can type instead. See [`hooks/useSpeechRecognition.ts`](hooks/useSpeechRecognition.ts).
+
 So a candidate who *knows* the answer but delivers it hesitantly gets a different interview than one who delivers it crisply — the same way a human interviewer would react.
 
 ## Cost: $0
@@ -302,6 +308,9 @@ ai_mock_interview_prep/
 │   ├── analytics/                # Pure, dependency-free computation
 │   │   ├── speaking.ts           # Speech metrics
 │   │   └── progress.ts           # Progress aggregation (unit-tested)
+│   ├── interview/                # Pure interview-domain rules
+│   │   ├── non-answer.ts         # ★ "I don't know" detection + skip planning
+│   │   └── question-quality.ts   # Sanitize/validate generated question sets
 │   ├── runner/code-runner.ts     # ★ Web Worker code sandbox
 │   ├── rate-limit.ts             # Transactional Firestore rate limiter
 │   ├── utils.ts                  # cn(), tech logos, cover images
@@ -319,7 +328,10 @@ ai_mock_interview_prep/
 │   ├── client.ts                 # Browser SDK (login only)
 │   └── admin.ts                  # Server SDK (verify + DB)
 │
-├── tests/                        # Vitest — 7 files, 39 tests
+├── hooks/
+│   └── useSpeechRecognition.ts   # ★ Robust browser speech-to-text
+│
+├── tests/                        # Vitest — 10 files, 120 tests
 ├── public/                       # Static assets (avatars, covers, icons)
 └── .github/workflows/ci.yml      # Typecheck + tests on push/PR
 ```
@@ -2173,7 +2185,7 @@ This codebase does (b), because most readers are only ever called from server co
 
 # 21. Testing & CI
 
-**49 tests across 8 files, ~150 ms.** All target pure logic — no mocked network, no rendering.
+**120 tests across 10 files.** All target pure logic — no mocked network, no rendering.
 
 | File | Covers |
 |---|---|
@@ -2185,6 +2197,8 @@ This codebase does (b), because most readers are only ever called from server co
 | `resume-coach.test.ts` | Coaching schema bounds |
 | `code-runner.test.ts` | Runnable-language gating, non-runnable error message |
 | `progress.test.ts` | Aggregation, competency ranking, streak edge cases (today/yesterday, gaps, same-day) |
+| `non-answer.test.ts` | Refusal detection, false-positive guards, skip-turn progression |
+| `question-quality.test.ts` | Numbering/bullet stripping, de-duplication, minimum-count rules |
 
 **The testing philosophy is explicit:** test what is deterministic. There are no tests asserting Gemini returns particular text — that would be flaky and would test the model rather than the code. Instead:
 
@@ -2400,4 +2414,4 @@ The complete story, start to finish.
 
 ---
 
-*Generated from the repository at commit `0db7378`. Every code excerpt is quoted from the actual source. Where the implementation has a known flaw, §23 says so.*
+*Every code excerpt in this document is quoted from the actual source in this repository, not paraphrased. Where the implementation has a known flaw or an accepted limitation, §23 says so plainly.*

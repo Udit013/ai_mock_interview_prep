@@ -86,12 +86,10 @@ const InterviewForm = () => {
   };
 
   const onSubmit = async (values: FormValues) => {
-    if (mode === "manual" && (!values.techstack || values.techstack.length < 2)) {
-      form.setError("techstack", { message: "Enter at least one technology" });
-      return;
-    }
+    // Tech stack is optional: with none supplied the generator infers what the
+    // role actually requires, so there's nothing to block on here.
     if (mode === "resume" && !resume) {
-      toast.error("Upload and parse a resume first.");
+      toast.error("Upload a résumé first so questions can reference your work.");
       return;
     }
 
@@ -102,18 +100,37 @@ const InterviewForm = () => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           ...values,
+          techstack: values.techstack?.trim() ?? "",
           source: mode,
           visibility,
           resumeContext: mode === "resume" ? resume : undefined,
         }),
       });
+
+      if (res.status === 401) {
+        toast.error("Your session expired. Please sign in again.");
+        router.push("/sign-in");
+        return;
+      }
+      if (res.status === 429) {
+        toast.error(
+          "You've reached today's limit for creating interviews. Try again tomorrow."
+        );
+        return;
+      }
+
       const data = await res.json();
       if (!data.success) throw new Error(data.error ?? "Generation failed");
-      toast.success("Interview created! Starting now…");
+
+      toast.success("Interview created — find it on your dashboard.");
       router.push("/");
       router.refresh();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Something went wrong");
+      toast.error(
+        e instanceof Error
+          ? e.message
+          : "Couldn't create the interview. Please try again."
+      );
     } finally {
       setLoading(false);
     }
@@ -294,12 +311,19 @@ const InterviewForm = () => {
             </div>
 
             {mode === "manual" && (
-              <FormField
-                control={form.control}
-                name="techstack"
-                label="Tech Stack"
-                placeholder="e.g. React, Node.js, PostgreSQL, AWS"
-              />
+              <div className="flex flex-col gap-1">
+                <FormField
+                  control={form.control}
+                  name="techstack"
+                  label="Tech Stack (optional)"
+                  placeholder="e.g. React, Node.js, PostgreSQL, AWS"
+                />
+                <p className="text-xs text-light-400">
+                  Leave blank and we&apos;ll infer the skills a{" "}
+                  {form.watch("level").toLowerCase()}{" "}
+                  {form.watch("role")?.trim() || "candidate"} is expected to know.
+                </p>
+              </div>
             )}
 
             <div className="flex flex-col gap-2">
