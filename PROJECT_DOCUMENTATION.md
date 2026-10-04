@@ -133,7 +133,7 @@ GET /
        └─ browser hydrates only the interactive islands (client components)
 ```
 
-**Key insight:** the dashboard has **zero client-side data fetching**. There is no `useEffect(() => fetch(...))` anywhere on it. The page is assembled on the server with the data already in it. That's why the home route's client JS payload is only ~183 B.
+**Key insight:** the dashboard has **zero client-side data fetching**. There is no `useEffect(() => fetch(...))` anywhere on it. The page is assembled on the server with the data already in it. That's why the home route's client JS payload is only ~173 B.
 
 ---
 
@@ -302,15 +302,19 @@ ai_mock_interview_prep/
 │   │   ├── interview.data.ts
 │   │   ├── resume.data.ts
 │   │   └── progress.data.ts      # fetch wrapper only
+│   ├── auth/
+│   │   └── session.ts            # cache()-memoised session lookup (not RPC)
 │   ├── ai/                       # Gemini prompt construction + schemas
 │   │   ├── adaptive.ts           # ★ The adaptive interview engine
+│   │   ├── limits.ts             # 45 s timeout for every model call
 │   │   └── resume.ts             # Résumé parsing + coaching
 │   ├── analytics/                # Pure, dependency-free computation
 │   │   ├── speaking.ts           # Speech metrics
 │   │   └── progress.ts           # Progress aggregation (unit-tested)
 │   ├── interview/                # Pure interview-domain rules
 │   │   ├── non-answer.ts         # ★ "I don't know" detection + skip planning
-│   │   └── question-quality.ts   # Sanitize/validate generated question sets
+│   │   ├── question-quality.ts   # Sanitize/validate generated question sets
+│   │   └── turn-client.ts        # Browser call to /respond: timeout + outcomes
 │   ├── runner/code-runner.ts     # ★ Web Worker code sandbox
 │   ├── rate-limit.ts             # Transactional Firestore rate limiter
 │   ├── utils.ts                  # cn(), tech logos, cover images
@@ -331,9 +335,9 @@ ai_mock_interview_prep/
 ├── hooks/
 │   └── useSpeechRecognition.ts   # ★ Robust browser speech-to-text
 │
-├── tests/                        # Vitest — 10 files, 120 tests
+├── tests/                        # Vitest — 13 files, 140 tests
 ├── public/                       # Static assets (avatars, covers, icons)
-└── .github/workflows/ci.yml      # Typecheck + tests on push/PR
+└── .github/workflows/ci.yml      # Typecheck + lint + tests on push/PR
 ```
 
 ## Why organized this way?
@@ -675,16 +679,18 @@ Two Firebase SDKs are used for two different jobs:
 User fills form → AuthForm.onSubmit (client)
   │
   ├─ createUserWithEmailAndPassword(auth, email, password)   [Firebase Client]
-  │     └─ Firebase creates the account, returns a UID
+  │     └─ Firebase creates the account and signs the browser in
+  ├─ userCredentials.user.getIdToken()   → short-lived JWT
   │
-  ├─ signUp({ uid, name, email, password })                  [Server Action]
+  ├─ signUp({ idToken, name })                               [Server Action]
+  │     ├─ auth.verifyIdToken(idToken)   → uid + email come from the TOKEN
   │     ├─ check users/{uid} doesn't already exist
   │     └─ db.collection("users").doc(uid).set({ name, email })
   │
   └─ router.push("/sign-in")     ← note: does NOT auto-login
 ```
 
-The password is passed to `signUp` but **never stored** — Firebase Auth already owns it. Only `{ name, email }` is written.
+**The password never reaches our server** — Firebase Auth owns it. An earlier version sent `{ uid, name, email, password }` to `signUp` and trusted the uid/email as given. Because a server action is a public endpoint, anyone could have written a profile for an arbitrary uid, and the plaintext password was being transmitted for no reason. Now only a Firebase-signed ID token is sent and the server derives the identity from it.
 
 ## Sign-in flow
 
@@ -707,8 +713,10 @@ User fills form → AuthForm.onSubmit (client)
 
 ## Reading the session
 
+The lookup lives in `lib/auth/session.ts` (a plain server module, not `"use server"`), and `getCurrentUser()` in `auth.action.ts` delegates to it:
+
 ```ts
-export async function getCurrentUser(): Promise<User | null> {
+export const getSessionUser = cache(async (): Promise<User | null> => {
   const sessionCookie = (await cookies()).get("session")?.value;
   if (!sessionCookie) return null;
 
@@ -721,10 +729,12 @@ export async function getCurrentUser(): Promise<User | null> {
     console.log(e);
     return null;      // tampered / expired / revoked → treated as logged out
   }
-}
+});
 ```
 
 The `true` second argument means **check for revocation** — a costlier call that catches sessions revoked server-side. Returning `null` instead of throwing means every caller can treat "no user" uniformly.
+
+**Why React `cache()`?** Every protected page runs this twice: once in the `(root)` layout guard and once in the page itself. `cache()` memoises it for the duration of one server render, so the revocation check and the Firestore read happen once per request instead of twice. Outside a render (route handlers, server actions) it simply runs once per call.
 
 ## Route protection — no middleware
 
@@ -1079,6 +1089,8 @@ Three Route Handlers. All three share the same defense sequence: **auth → rate
 
 **Every bound is deliberate.** `userAnswer` ≤ 8000, history ≤ 40 entries × 8000 chars, code ≤ 20,000 chars. Without these a hostile client could push a multi-megabyte prompt and drain the Gemini quota.
 
+`interviewState` is validated with `interviewStateInputSchema`: absurd payloads (more than 200 entries per list, or entries over 5000 chars) are rejected, and anything merely oversized is **trimmed** to the newest 20 entries × 300 chars by `boundInterviewState()`. Trimming instead of rejecting matters — the state round-trips through the browser every turn, so a strict limit would make a long interview start failing with 400s halfway through. The model's own `updatedState` is trimmed the same way before it is returned.
+
 **Response**
 
 ```jsonc
@@ -1150,10 +1162,10 @@ Better would be: retry with exponential backoff for transient 5xx, and on persis
 
 | Function | Purpose | Notes |
 |---|---|---|
-| `signUp({uid,name,email,password})` | Create `users/{uid}` | Rejects if the doc exists. Password never stored. |
+| `signUp({idToken,name})` | Create `users/{uid}` | uid/email derived from a verified ID token; rejects if the doc exists. Password never sent. |
 | `signIn({email,idToken})` | Establish session | Verifies user exists, then mints the cookie |
 | `setSessionCookie(idToken)` | Mint 7-day httpOnly cookie | `httpOnly`, `secure` in prod, `sameSite: lax` |
-| `getCurrentUser()` | Verify cookie → `User \| null` | `verifySessionCookie(cookie, true)` checks revocation |
+| `getCurrentUser()` | Verify cookie → `User \| null` | Delegates to the `cache()`-memoised `lib/auth/session.ts`; checks revocation |
 | `isAuthenticated()` | `!!getCurrentUser()` | Used by both layout guards |
 | `signOut()` | Delete the cookie | Local device only |
 
@@ -1374,20 +1386,28 @@ Hesitation is `firstSpeech − micOpen`; speaking time is `end − firstSpeech`.
 **The turn loop**
 
 ```text
-handleUserAnswer(answer)
+handleUserAnswer(answer, signals)
   ├─ guard: statusRef.current === ACTIVE?
-  ├─ append user message to state + ref
-  ├─ setIsProcessing(true)
-  ├─ POST /api/interview/respond  { answer, history, state, signals, code, company }
-  ├─ append assistant message
-  ├─ interviewStateRef.current = data.interviewState     ← carry state forward
-  ├─ exchangeCountRef.current  = data.exchangeCount
-  ├─ onActiveQuestionChange?.(data.activeQuestionIndex)
-  ├─ await speakText(data.aiResponse)                    ← blocks until spoken
-  └─ data.isFinished ? setCallStatus(FINISHED) : startListening(handleUserAnswer)
+  ├─ append user message to state + ref (optimistic)
+  ├─ result = await postInterviewTurn({...})     ← lib/interview/turn-client.ts, 50 s timeout
+  ├─ "rate_limited"  → toast, FINISHED
+  ├─ "unauthorized"  → toast, /sign-in
+  ├─ "failed"        → remove the optimistic message,
+  │                    speech.reopen(answer) puts it back in the box, toast "press Send to retry"
+  └─ "ok":
+       ├─ record speaking analytics (only now — retries must not double-count)
+       ├─ append assistant message
+       ├─ interviewStateRef.current = data.interviewState     ← carry state forward
+       ├─ exchangeCountRef / activeQuestionIndexRef updated
+       ├─ await speakText(data.aiResponse)                    ← blocks until spoken
+       └─ data.isFinished ? setCallStatus(FINISHED) : startListening()
 ```
 
 `await speakText(...)` is what prevents the app from listening to its own voice — the mic only reopens after speech ends.
+
+**Why `reopen()` exists.** The speech hook's `finalize()` is guarded so one answer can only be submitted once — that guard is what stops a silence timer and a manual Send from double-submitting. But it also meant that when a submit *failed*, pressing Send again did nothing: the guard had already fired. An earlier version told the user "press Send to retry" while silently ignoring them. `reopen(text)` resets the guard and restores the text, and the optimistic message is rolled back so the retried answer doesn't appear in the transcript twice. This was verified in a browser by forcing a network failure, then a 500, then a success: three requests, exactly one copy of the answer in each request's history.
+
+**Why the request lives in `turn-client.ts`.** Keeping the `fetch` + timeout + status mapping out of React makes it unit-testable with a fake `fetch` (`tests/turn-client.test.ts`), including the hung-request timeout case. The client timeout (50 s) is deliberately longer than the server's 45 s model timeout, so the server's own error normally wins.
 
 **Coding-round opening** — speech and transcript deliberately diverge:
 
@@ -1411,12 +1431,13 @@ useEffect(() => {
   const finish = async () => {
     const candidateTurns = messagesRef.current.filter(m => m.role === "user").map(m => m.content);
     const speakingAnalytics = analyzeSpeaking(candidateTurns, answerDurationsRef.current);
-    const { success, feedbackId: newId } = await createFeedback({
+    const result = await createFeedback({
       interviewId: interviewId!, userId: userId!,
       transcript: messagesRef.current, feedbackId,
       speakingAnalytics, finalCode: getCodeContext?.() ?? undefined,
-    });
-    router.push(success && newId ? `/interview/${interviewId}/feedback` : "/");
+    }).catch(() => null);          // a thrown action must not strand the user
+    if (result?.success && result.feedbackId) router.push(`/interview/${interviewId}/feedback`);
+    else { toast.error(result?.error === "rate_limited" ? "…daily feedback limit…" : "…"); router.push("/"); }
   };
   finish();
 }, [callStatus]);   // eslint-disable-line react-hooks/exhaustive-deps
@@ -1533,12 +1554,13 @@ The `<T extends FieldValues>` generic ties `name` to `Path<T>`, so a typo like `
 
 ```ts
 const DisplayTechIcons = async ({ techStack }: TechIconProps) => {
-  const techIcons = await getTechLogos(techStack);
-  // …renders first 3, overlapped with -ml-3
+  // Only three are shown, so only look up three.
+  const techIcons = await getTechLogos((techStack ?? []).slice(0, 3));
+  // …renders them overlapped with -ml-3
 };
 ```
 
-A component that `await`s directly — only possible in RSC. It performs `HEAD` requests to jsDelivr to check whether each icon exists, falling back to `/tech.svg`. Doing this on the server means no client-side loading state and no broken image flashes.
+A component that `await`s directly — only possible in RSC. It checks with jsDelivr whether each icon exists, falling back to `/tech.svg`. Doing this on the server means no client-side loading state and no broken image flashes. An earlier version checked *every* tech on *every* render and sliced to three afterwards; see `getTechLogos()` in §13 for the caching.
 
 **Interview Questions — Components**
 
@@ -1638,7 +1660,13 @@ export function cn(...inputs: ClassValue[]) {
 
 **Why both libraries?** `clsx` handles conditionals (`isActive && "bg-blue"`). `twMerge` resolves Tailwind *conflicts* — `cn("p-4", "p-8")` yields `"p-8"` rather than both classes fighting by CSS-order accident. Essential when a base class list is overridden by a prop.
 
-`getTechLogos()` maps names to devicon URLs, `HEAD`-checks each in parallel via `Promise.all`, and falls back to `/tech.svg`.
+`getTechLogos()` maps names to devicon URLs, `HEAD`-checks each in parallel via `Promise.all`, and falls back to `/tech.svg`. Three details keep it cheap:
+
+- **Unmapped names skip the network.** Previously an unknown tech produced a request for `…/undefined/undefined-original.svg` on every render.
+- **Results are cached per server instance** in a `Map<url, Promise<boolean>>`. Storing the *promise* means two cards rendering the same icon concurrently share one request.
+- **Network failures are not cached** (the entry is deleted), so a blip doesn't pin the fallback icon for the life of the instance. Each check has a 3 s timeout.
+
+Measured from a dev machine, one check costs ~0.13–0.17 s (up to 1.23 s for a missing icon), so this removes real latency from dashboard renders. Covered by `tests/tech-logos.test.ts`.
 
 ## `lib/buffer-shim.js` — a genuine compatibility war story
 
@@ -1936,6 +1964,7 @@ jobs:
         with: { node-version: 20, cache: npm }
       - run: npm ci
       - run: npm run typecheck
+      - run: npm run lint
       - run: npm test
 ```
 
@@ -2163,6 +2192,12 @@ Every Gemini-backed endpoint runs the same sequence, in this order:
 | No request size limits | Hostile payloads could inflate prompts and drain quota | Zod bounds on every field |
 | No rate limits | One user could exhaust the daily API budget | Transactional per-user daily counters |
 | `.env.local` tracked in git | Secrets in history | Untracked + gitignored (**key still needs rotation**) |
+| `signUp` trusted a caller-supplied uid/email, and the client sent the plaintext password | Anyone could create a profile document for an arbitrary uid; the password crossed to our server needlessly | Server derives uid/email from a verified ID token; only the token is sent |
+| `createFeedback` (a Gemini call) had **no rate limit** | A signed-in user could call the action in a loop and drain the model quota | `feedback` limit of 30/day, checked after authorization |
+| `interviewState` arrays/strings were **unbounded** | Every turn re-sends the state, so a client could grow each prompt without limit | Rejected if absurd, trimmed to 20 × 300 chars otherwise |
+| No timeouts on Gemini calls or functions | A stalled model call hung the function until the platform killed it with a generic 504 | 45 s `abortSignal` on every call, `maxDuration = 60` on every route/page that calls Gemini |
+| Next.js 15.2.9 had a critical advisory (image-optimizer RCE) plus high-severity Server Action / RSC DoS issues | Framework-level exposure | Upgraded to 15.5.27; `npm audit` (production) went from 30 to 22 findings, critical from 5 to 0 |
+| No security headers | Pages could be framed (clickjacking) and MIME-sniffed | `X-Frame-Options: DENY`, `nosniff`, `Referrer-Policy`, `Permissions-Policy` (HSTS comes from Vercel) |
 
 ## Why `lib/data/` is a security control, not a style choice
 
@@ -2187,7 +2222,7 @@ This codebase does (b), because most readers are only ever called from server co
 
 # 21. Testing & CI
 
-**120 tests across 10 files.** All target pure logic — no mocked network, no rendering.
+**140 tests across 13 files.** All target deterministic logic — no rendering, and no real network (the two files that touch `fetch` use a fake).
 
 | File | Covers |
 |---|---|
@@ -2201,6 +2236,9 @@ This codebase does (b), because most readers are only ever called from server co
 | `progress.test.ts` | Aggregation, competency ranking, streak edge cases (today/yesterday, gaps, same-day) |
 | `non-answer.test.ts` | Refusal detection, false-positive guards, skip-turn progression |
 | `question-quality.test.ts` | Numbering/bullet stripping, de-duplication, minimum-count rules |
+| `interview-state-bounds.test.ts` | State trimming, reject-vs-trim thresholds, bounded prompt contribution |
+| `turn-client.test.ts` | Respond-call outcome mapping (429/401/500/empty reply), network failure, hung-request timeout |
+| `tech-logos.test.ts` | Icon lookup caching, shared concurrent checks, no network for unmapped techs, failures not cached |
 
 **The testing philosophy is explicit:** test what is deterministic. There are no tests asserting Gemini returns particular text — that would be flaky and would test the model rather than the code. Instead:
 
@@ -2236,19 +2274,20 @@ git push origin main
              └─ Dynamic (ƒ): every other route — they read cookies/DB
 ```
 
-**Route sizes at last build:**
+**Route sizes at last build (Next.js 15.5.27):**
 
 | Route | Size | First Load JS |
 |---|---|---|
-| `/` | 183 B | 109 kB |
-| `/interview` | 6.07 kB | 148 kB |
-| `/interview/[id]` | 8.93 kB | 145 kB |
-| `/interview/[id]/feedback` | 2.9 kB | 142 kB |
-| `/interview/[id]/replay` | 1.91 kB | 132 kB |
-| `/resume` | 3 kB | 137 kB |
-| `/share/[token]` | 173 B | 104 kB |
+| `/` | 173 B | 111 kB |
+| `/interview` | 6.22 kB | 149 kB |
+| `/interview/[id]` | 11.1 kB | 148 kB |
+| `/interview/[id]/feedback` | 2.88 kB | 143 kB |
+| `/interview/[id]/replay` | 1.86 kB | 133 kB |
+| `/resume` | 3.46 kB | 135 kB |
+| `/share/[token]` | 486 B | 106 kB |
+| `/sign-in`, `/sign-up` | ~143 B | 244 kB (was 286 kB on 15.2.9) |
 
-The dashboard at **183 B** is the clearest evidence the RSC strategy works — the entire progress dashboard with SVG charts ships as HTML.
+The dashboard at **173 B** is the clearest evidence the RSC strategy works — the entire progress dashboard with SVG charts ships as HTML.
 
 **A real deployment failure worth knowing:** builds once compiled successfully but Vercel **blocked the deployment** because Next.js 15.2.3 had a critical RSC vulnerability. The fix was upgrading to 15.2.9 — a reminder that a green build is not the same as a shippable artifact. A later audit found 15.2.9 itself had since picked up a critical advisory (image-optimizer RCE, fixed in 15.5.24) plus several high-severity Server Action/RSC DoS issues, so the project moved to 15.5.27, the latest 15.x.
 
@@ -2388,7 +2427,7 @@ The complete story, start to finish.
 
 **They sign in.** `signInWithEmailAndPassword` returns a credential; `getIdToken()` yields a ~1-hour JWT. The `signIn` action verifies the user exists, then `auth.createSessionCookie(idToken, { expiresIn: 7 days })` mints a long-lived cookie set with `httpOnly`, `secure`, and `sameSite: "lax"`. Now `getCurrentUser()` will succeed on every future request.
 
-**The dashboard renders.** `app/(root)/page.tsx` runs on the server and fires four queries in `Promise.all`. `getUserProgress` aggregates their (currently empty) feedback. Since `progress.totalInterviews === 0`, the coaching hub is skipped. The HTML streams down; only the small client islands hydrate. Total client JS for this route: 183 B.
+**The dashboard renders.** `app/(root)/page.tsx` runs on the server and fires four queries in `Promise.all`. `getUserProgress` aggregates their (currently empty) feedback. Since `progress.totalInterviews === 0`, the coaching hub is skipped. The HTML streams down; only the small client islands hydrate. Total client JS for this route: 173 B.
 
 **They create a coding interview.** On `/interview` they pick "Coding," level Mid, company style Google, five questions. `InterviewForm` POSTs to `/api/vapi/generate` **without a user ID** — the server derives it. The route authenticates, checks the 20/day limit transactionally, validates with Zod, and looks up the Google company mode. Because the type is Coding, the prompt demands self-contained problems solvable in 15–25 minutes; because the company is Google, `companyPromptBlock` injects a persona emphasizing first-principles reasoning. Gemini returns a JSON array (possibly fenced in markdown, which is stripped), and the interview is written to Firestore with `visibility: "public"` and `companyMode: "google"`. The client refreshes; a new card appears with a 🌐 Public badge.
 
