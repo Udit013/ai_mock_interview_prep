@@ -1,5 +1,6 @@
 import { generateText } from "ai";
 import { google } from "@ai-sdk/google";
+import { aiAbortSignal } from "@/lib/ai/limits";
 import { z } from "zod";
 import { getRandomInterviewCover } from "@/lib/utils";
 import { db } from "@/firebase/admin";
@@ -11,6 +12,10 @@ import {
   sanitizeQuestions,
   meetsMinimumCount,
 } from "@/lib/interview/question-quality";
+
+// Gemini calls are capped at 45 s (lib/ai/limits.ts); leave headroom for auth
+// and Firestore. Must be a literal — Next reads it statically.
+export const maxDuration = 60;
 
 /**
  * An error whose message is safe (and useful) to show the user. Everything else
@@ -172,6 +177,7 @@ Return ONLY a JSON array of strings, like:
 
     const { text: questions } = await generateText({
       model: google("gemini-2.5-flash"),
+      abortSignal: aiAbortSignal(),
       prompt,
     });
 

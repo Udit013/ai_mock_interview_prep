@@ -1,5 +1,6 @@
 import { generateObject } from "ai";
 import { google } from "@ai-sdk/google";
+import { aiAbortSignal } from "@/lib/ai/limits";
 import { z } from "zod";
 
 /** Live model of how the interview is going, carried across turns. */
@@ -13,6 +14,44 @@ export const interviewStateSchema = z.object({
 });
 
 export type InterviewStateSchema = z.infer<typeof interviewStateSchema>;
+
+/** Most recent entries kept per state list; older ones add little signal. */
+export const STATE_LIST_MAX = 20;
+/** Longest single state entry, in characters. */
+export const STATE_ITEM_MAX_CHARS = 300;
+
+/**
+ * Trim the state to a fixed size. The state round-trips through the browser
+ * and is pasted into every prompt, so without this a client (or a verbose
+ * model) could grow each Gemini call without limit.
+ */
+export function boundInterviewState(
+  state: InterviewStateSchema
+): InterviewStateSchema {
+  const trimList = (list: string[]) =>
+    list.slice(-STATE_LIST_MAX).map((s) => s.slice(0, STATE_ITEM_MAX_CHARS));
+  return {
+    ...state,
+    strengths: trimList(state.strengths),
+    weaknesses: trimList(state.weaknesses),
+    topicsCovered: trimList(state.topicsCovered),
+    followUpOpportunities: trimList(state.followUpOpportunities),
+  };
+}
+
+/**
+ * Request-side variant: rejects absurd payloads outright, then trims anything
+ * merely oversized so a long interview never fails validation mid-session.
+ */
+const inputList = z.array(z.string().max(5000)).max(200);
+export const interviewStateInputSchema = interviewStateSchema
+  .extend({
+    strengths: inputList,
+    weaknesses: inputList,
+    topicsCovered: inputList,
+    followUpOpportunities: inputList,
+  })
+  .transform(boundInterviewState);
 
 /** One adaptive turn: evaluate the answer, update state, decide + speak next. */
 export const adaptiveTurnSchema = z.object({
@@ -220,6 +259,7 @@ Evaluate the candidate's most recent answer, update the interview state (carry f
 
   const { object } = await generateObject({
     model: google("gemini-2.5-flash"),
+    abortSignal: aiAbortSignal(),
     schema: adaptiveTurnSchema,
     prompt,
   });
@@ -227,5 +267,8 @@ Evaluate the candidate's most recent answer, update the interview state (carry f
   // Deterministic termination: the cap wins over the model's choice.
   const isFinished = mustFinish || object.action === "finish";
 
-  return { turn: object, isFinished };
+  return {
+    turn: { ...object, updatedState: boundInterviewState(object.updatedState) },
+    isFinished,
+  };
 }

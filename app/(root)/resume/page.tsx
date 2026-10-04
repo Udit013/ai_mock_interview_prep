@@ -5,6 +5,10 @@ import { getResumeByUserId } from "@/lib/data/resume.data";
 import ResumeCoach from "@/components/ResumeCoach";
 import ResumeUpload from "@/components/ResumeUpload";
 
+// Server actions run inside this page's function, so this bounds
+// suggestResumeImprovements's Gemini call (capped at 45 s in lib/ai/limits.ts).
+export const maxDuration = 60;
+
 const Page = async () => {
   const user = await getCurrentUser();
   if (!user) redirect("/sign-in");

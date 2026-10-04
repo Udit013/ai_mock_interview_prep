@@ -44,4 +44,6 @@ export const RATE_LIMITS = {
   interviewTurn: 300,
   resumeParse: 10,
   resumeCoach: 5,
+  // One per finished interview; above generateInterview to allow retakes.
+  feedback: 30,
 } as const;

@@ -13,9 +13,11 @@ import { randomBytes } from "crypto";
 import { db } from "@/firebase/admin";
 import { generateObject } from "ai";
 import { google } from "@ai-sdk/google";
+import { aiAbortSignal } from "@/lib/ai/limits";
 import { feedbackSchema } from "@/constants";
 import { companyPromptBlock } from "@/constants/companies";
 import { getCurrentUser } from "@/lib/actions/auth.action";
+import { checkRateLimit, RATE_LIMITS } from "@/lib/rate-limit";
 
 /** Enable sharing: mints an unguessable token for the owner's feedback doc. */
 export async function shareFeedback(
@@ -69,7 +71,11 @@ export async function createFeedback({
   feedbackId,
   speakingAnalytics,
   finalCode,
-}: CreateFeedbackParams): Promise<{ success: boolean; feedbackId?: string }> {
+}: CreateFeedbackParams): Promise<{
+  success: boolean;
+  feedbackId?: string;
+  error?: "rate_limited";
+}> {
   try {
     // Never trust the caller-supplied userId: server actions are public
     // endpoints. The session must exist and match.
@@ -96,6 +102,16 @@ export async function createFeedback({
       }
     }
 
+    // Each call is a Gemini request, and this action is a public endpoint —
+    // cap it like the other model-backed routes. Checked after authorization
+    // so a rejected caller can't burn the owner's quota.
+    const { allowed } = await checkRateLimit(
+      sessionUser.id,
+      "feedback",
+      RATE_LIMITS.feedback
+    );
+    if (!allowed) return { success: false, error: "rate_limited" };
+
     // Company mode (if any) shapes the evaluation emphasis.
     const companyBlock = companyPromptBlock(interviewDoc.data()?.companyMode);
 
@@ -114,6 +130,7 @@ export async function createFeedback({
 
     const { object: feedbackData } = await generateObject({
       model: google("gemini-2.5-flash"),
+      abortSignal: aiAbortSignal(),
       schema: feedbackSchema,
       prompt: `You are an expert interview coach analyzing a mock job interview transcript.
 ${companyBlock}

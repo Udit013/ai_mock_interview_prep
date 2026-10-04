@@ -11,6 +11,10 @@ import {
   getFeedbackByInterviewId,
 } from "@/lib/data/interview.data";
 
+// Server actions run inside this page's function, so this bounds
+// createFeedback's Gemini call (capped at 45 s in lib/ai/limits.ts).
+export const maxDuration = 60;
+
 const Page = async ({ params }: RouteParams) => {
   const { id } = await params;
 

@@ -1,5 +1,6 @@
 import { generateObject } from "ai";
 import { google } from "@ai-sdk/google";
+import { aiAbortSignal } from "@/lib/ai/limits";
 import { z } from "zod";
 
 /**
@@ -85,6 +86,7 @@ export async function generateResumeImprovements(
 ): Promise<ResumeImprovements> {
   const { object } = await generateObject({
     model: google("gemini-2.5-flash"),
+    abortSignal: aiAbortSignal(),
     schema: resumeImprovementSchema,
     prompt: `You are a blunt, expert résumé coach for software/consulting candidates.
 Review this structured résumé and produce concrete improvements.
@@ -121,6 +123,7 @@ export async function structureResume(rawText: string): Promise<ResumeSchema> {
 
   const { object } = await generateObject({
     model: google("gemini-2.5-flash"),
+    abortSignal: aiAbortSignal(),
     schema: resumeSchema,
     prompt: `You are an expert technical recruiter parsing a candidate's resume.
 Extract structured information from the raw resume text below.

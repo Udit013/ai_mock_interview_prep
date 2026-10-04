@@ -3,7 +3,7 @@ import {
   runAdaptiveTurn,
   maxExchangesFor,
   DEFAULT_INTERVIEW_STATE,
-  interviewStateSchema,
+  interviewStateInputSchema,
   deliverySignalsSchema,
   codeSubmissionSchema,
 } from "@/lib/ai/adaptive";
@@ -11,6 +11,10 @@ import { companyPromptBlock } from "@/constants/companies";
 import { isNonAnswer, planSkipTurn } from "@/lib/interview/non-answer";
 import { getCurrentUser } from "@/lib/actions/auth.action";
 import { checkRateLimit, RATE_LIMITS } from "@/lib/rate-limit";
+
+// Gemini calls are capped at 45 s (lib/ai/limits.ts); leave headroom for auth
+// and Firestore. Must be a literal — Next reads it statically.
+export const maxDuration = 60;
 
 // Bounds keep prompt size (and Gemini cost) capped even for hostile payloads.
 const respondBodySchema = z.object({
@@ -29,7 +33,7 @@ const respondBodySchema = z.object({
     .max(40)
     .optional()
     .default([]),
-  interviewState: interviewStateSchema.optional(),
+  interviewState: interviewStateInputSchema.optional(),
   exchangeCount: z.coerce.number().int().min(0).max(50).optional().default(0),
   // Realism: how the answer was delivered (hesitation, pace, fillers).
   deliverySignals: deliverySignalsSchema.optional(),
