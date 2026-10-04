@@ -2,13 +2,27 @@
 
 import {db, auth} from "@/firebase/admin";
 import {cookies} from "next/headers";
+import {getSessionUser} from "@/lib/auth/session";
 
 const ONE_WEEK = 60 * 60 * 24 * 7;
 
 export async function signUp(params: SignUpParams) {
-    const { uid, name, email } = params;
+    const { idToken, name } = params;
 
     try {
+        // Public endpoint: derive the account from a verified ID token rather
+        // than trusting a caller-supplied uid/email, so nobody can write a
+        // profile for an account they don't hold.
+        const { uid, email } = await auth.verifyIdToken(idToken);
+        const displayName = typeof name === 'string' ? name.trim().slice(0, 100) : '';
+
+        if(!email || !displayName) {
+            return {
+                success: false,
+                message: 'Failed to create an account'
+            }
+        }
+
         const userRecord = await db.collection('users').doc(uid).get();
 
         if(userRecord.exists) {
@@ -19,17 +33,17 @@ export async function signUp(params: SignUpParams) {
         }
 
         await db.collection('users').doc(uid).set({
-            name, email
+            name: displayName, email
         })
 
         return {
             success: true,
             message: 'Account created successfully. Please sign in.'
         }
-    } catch (e: any) {
+    } catch (e) {
         console.error('Error creating a user', e);
 
-        if(e.code === 'auth/email-already-exists') {
+        if((e as { code?: string })?.code === 'auth/email-already-exists') {
             return {
                 success: false,
                 message: 'This email is already in use.'
@@ -87,31 +101,7 @@ async function setSessionCookie(idToken: string) {
 }
 
 export async function getCurrentUser(): Promise<User | null> {
-    const cookieStore = await cookies();
-
-    const sessionCookie = cookieStore.get('session')?.value;
-
-    if(!sessionCookie) return null;
-
-    try {
-        const decodedClaims = await auth.verifySessionCookie(sessionCookie, true);
-
-        const userRecord = await db.
-            collection('users')
-            .doc(decodedClaims.uid)
-            .get();
-
-        if(!userRecord.exists) return null;
-
-        return {
-            ...userRecord.data(),
-            id: userRecord.id,
-        } as User;
-    } catch (e) {
-        console.log(e)
-
-        return null;
-    }
+    return getSessionUser();
 }
 
 export async function isAuthenticated() {

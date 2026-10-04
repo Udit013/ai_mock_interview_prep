@@ -45,11 +45,10 @@ const AuthForm = ({ type }: { type: FormType }) => {
 
                 const userCredentials = await createUserWithEmailAndPassword(auth, email, password);
 
+                // Only the ID token goes to our server — never the password.
                 const result = await signUp({
-                    uid: userCredentials.user.uid,
+                    idToken: await userCredentials.user.getIdToken(),
                     name: name!,
-                    email,
-                    password,
                 })
 
                 if(!result?.success) {

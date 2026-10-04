@@ -259,10 +259,9 @@ interface SignInParams {
 }
 
 interface SignUpParams {
-  uid: string;
+  /** Firebase ID token of the just-created account; the server derives uid/email from it. */
+  idToken: string;
   name: string;
-  email: string;
-  password: string;
 }
 
 type FormType = "sign-in" | "sign-up";
