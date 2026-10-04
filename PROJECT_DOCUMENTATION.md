@@ -1622,8 +1622,11 @@ it("respects word boundaries — 'also' is not 'so', 'unlike' is not 'like'", ()
 | `interviewTurn` | 300 |
 | `resumeParse` | 10 |
 | `resumeCoach` | 5 |
+| `feedback` | 30 |
 
-`interviewTurn` is 300 because a single interview is up to 12 turns — that's ~25 full interviews per day.
+`interviewTurn` is 300 because a single interview is up to 12 turns — that's ~25 full interviews per day. `feedback` covers the `createFeedback` server action: it is a public endpoint that calls Gemini, so it gets a cap like the routes do (checked *after* authorization, so a rejected caller can't burn the owner's quota).
+
+Every Gemini call also carries `abortSignal: aiAbortSignal()` (45 s, `lib/ai/limits.ts`), and every route or page that triggers one declares `export const maxDuration = 60`. The abort fires first, so a stalled model call lands in our own `catch` with a friendly error instead of a platform 504.
 
 ## `lib/utils.ts`
 
@@ -1827,7 +1830,7 @@ Staggered `nth-child` delays create a cascade without JavaScript, and the reduce
 
 | Package | Why it's here | Used in | Alternative & trade-off |
 |---|---|---|---|
-| `next` 15.2.9 | Full-stack framework: routing, RSC, Server Actions, API routes, bundling | Everywhere | Vite + Express: more control, but you build routing/SSR/deploy yourself |
+| `next` 15.5.27 | Full-stack framework: routing, RSC, Server Actions, API routes, bundling | Everywhere | Vite + Express: more control, but you build routing/SSR/deploy yourself |
 | `react` / `react-dom` 19 | UI runtime; RSC + `use` hook support | Everywhere | Vue/Svelte — no reason to switch |
 | `firebase` 11 | **Client** SDK — email/password auth in the browser | `firebase/client.ts`, `AuthForm` | Auth.js: more providers, more setup |
 | `firebase-admin` 13 | **Server** SDK — verify cookies, Firestore access | `firebase/admin.ts`, all actions | Required for privileged operations |
@@ -1884,8 +1887,7 @@ const nextConfig: NextConfig = {
       pathname: "/gh/devicons/devicon/**",
     }],
   },
-  eslint: { ignoreDuringBuilds: true },
-  typescript: { ignoreBuildErrors: true },
+  async headers() { /* X-Frame-Options, nosniff, Referrer-Policy, Permissions-Policy */ },
 };
 ```
 
@@ -1893,9 +1895,9 @@ const nextConfig: NextConfig = {
 |---|---|
 | `webpack` + `turbopack` aliases | Node 22+ `SlowBuffer` fix, needed by both bundlers |
 | `images.remotePatterns` | `next/image` refuses unlisted external hosts — this whitelists devicon logos |
-| `ignoreDuringBuilds` / `ignoreBuildErrors` | Deploys aren't blocked by lint/type errors |
+| `headers()` | Baseline security headers on every response: `X-Frame-Options: DENY` (no clickjacking), `nosniff`, a strict referrer policy, and `Permissions-Policy` allowing the microphone for this origin only. HSTS is already added by Vercel. |
 
-**The important caveat:** those two `ignore` flags mean `next build` does **not** typecheck. That's precisely why `npm run typecheck` exists as a separate script and why **CI runs it explicitly** — otherwise type errors would reach production silently. This is a real trade-off (faster, more resilient deploys vs. a weaker build gate), consciously compensated for in the pipeline.
+`next build` type-checks and lints — an earlier version disabled both (`ignoreBuildErrors` / `ignoreDuringBuilds`), which let type errors reach a deploy silently. CI also runs `typecheck`, `lint` and `test` explicitly, because CI has no secrets and can't run a full build.
 
 ## `tsconfig.json`
 
@@ -2248,7 +2250,7 @@ git push origin main
 
 The dashboard at **183 B** is the clearest evidence the RSC strategy works — the entire progress dashboard with SVG charts ships as HTML.
 
-**A real deployment failure worth knowing:** builds once compiled successfully but Vercel **blocked the deployment** because Next.js 15.2.3 had a critical RSC vulnerability. The fix was upgrading to 15.2.9 — a reminder that a green build is not the same as a shippable artifact.
+**A real deployment failure worth knowing:** builds once compiled successfully but Vercel **blocked the deployment** because Next.js 15.2.3 had a critical RSC vulnerability. The fix was upgrading to 15.2.9 — a reminder that a green build is not the same as a shippable artifact. A later audit found 15.2.9 itself had since picked up a critical advisory (image-optimizer RCE, fixed in 15.5.24) plus several high-severity Server Action/RSC DoS issues, so the project moved to 15.5.27, the latest 15.x.
 
 ---
 
