@@ -23,8 +23,11 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
 
+      - name: Lint
+        run: npm run lint
+
       - name: Unit tests
         run: npm test
 
 # Production builds run on Vercel with real secrets; CI stays secret-free by
-# verifying types and unit tests only.
+# verifying types, lint and unit tests only.

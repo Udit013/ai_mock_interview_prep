@@ -5,7 +5,7 @@ import {Button} from "@/components/ui/button";
 import Link from "next/link";
 import DisplayTechIcons from "@/components/DisplayTechIcons";
 
-const InterviewCard = ({ interviewId, userId, role, type, techstack, createdAt, feedback = null, visibility, coverImage }: InterviewCardProps) => {
+const InterviewCard = ({ interviewId, role, type, techstack, createdAt, feedback = null, visibility, coverImage }: InterviewCardProps) => {
     const normalizedType = /mix/gi.test(type) ? 'Mixed' : type;
     // Use the cover persisted at creation time; only fall back to a random one
     // for legacy documents that predate the stored field.

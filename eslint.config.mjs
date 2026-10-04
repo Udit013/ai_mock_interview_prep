@@ -10,6 +10,8 @@ const compat = new FlatCompat({
 });
 
 const eslintConfig = [
+  // CommonJS shim aliased in via next.config.ts; require() is intentional.
+  { ignores: ["lib/buffer-shim.js"] },
   ...compat.extends("next/core-web-vitals", "next/typescript"),
 ];
 

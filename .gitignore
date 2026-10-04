@@ -6,3 +6,9 @@ tsconfig.tsbuildinfo
 
 # Local secrets
 .env*.local
+
+# macOS metadata
+.DS_Store
+
+# Personal notes (contain contact details)
+knowledge_doc.md

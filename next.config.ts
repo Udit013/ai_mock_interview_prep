@@ -24,11 +24,25 @@ const nextConfig: NextConfig = {
       },
     ],
   },
-  eslint: {
-    ignoreDuringBuilds: true,
-  },
-  typescript: {
-    ignoreBuildErrors: true,
+  // Lint and type errors now fail the build instead of shipping silently.
+  async headers() {
+    return [
+      {
+        source: "/:path*",
+        headers: [
+          // No page is meant to be embedded; blocks clickjacking.
+          { key: "X-Frame-Options", value: "DENY" },
+          { key: "X-Content-Type-Options", value: "nosniff" },
+          { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+          // Interviews need the mic; nothing needs the camera or location.
+          {
+            key: "Permissions-Policy",
+            value: "microphone=(self), camera=(), geolocation=()",
+          },
+          // HSTS is already sent by Vercel on every deployment.
+        ],
+      },
+    ];
   },
 };
 
