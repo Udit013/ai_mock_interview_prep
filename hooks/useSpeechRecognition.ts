@@ -261,13 +261,9 @@ export function useSpeechRecognition({
     setStatus("starting");
     setError(null);
 
-    const ok = await ensurePermission();
-    if (!ok) {
-      setStatus("stopped");
-      return false;
-    }
-
-    // Reset per-answer state.
+    // Reset per-answer state before the permission check, so a candidate
+    // typing because the mic is blocked starts from an empty box rather than
+    // their previous answer.
     transcriptRef.current = "";
     setTranscript("");
     setInterim("");
@@ -279,6 +275,12 @@ export function useSpeechRecognition({
     restartCountRef.current = 0;
     finalizedRef.current = false;
     clearSilenceTimer();
+
+    const ok = await ensurePermission();
+    if (!ok) {
+      setStatus("stopped");
+      return false;
+    }
 
     const recognition = new Ctor();
     recognition.lang = lang;
@@ -320,6 +322,24 @@ export function useSpeechRecognition({
     shouldListenRef.current = false;
     setStatus("stopped");
   }, []);
+
+  /**
+   * Put a submitted answer back in the box so it can be sent again — used when
+   * the submit itself failed. Without this, finalize()'s once-per-answer guard
+   * would swallow the retry.
+   */
+  const reopen = useCallback(
+    (text: string) => {
+      shouldListenRef.current = false;
+      clearSilenceTimer();
+      transcriptRef.current = text;
+      setTranscript(text);
+      setInterim("");
+      finalizedRef.current = false;
+      setStatus("stopped");
+    },
+    [clearSilenceTimer]
+  );
 
   /** Abort without submitting (used when the interview ends or unmounts). */
   const cancel = useCallback(() => {
@@ -369,6 +389,7 @@ export function useSpeechRecognition({
     start,
     stop,
     cancel,
+    reopen,
     beginTypedAnswer,
     editTranscript,
     clearError: useCallback(() => setError(null), []),

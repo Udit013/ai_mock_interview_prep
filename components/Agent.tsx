@@ -15,6 +15,10 @@ import {
   useSpeechRecognition,
   type SpeechTiming,
 } from "@/hooks/useSpeechRecognition";
+import {
+  postInterviewTurn,
+  describeTurnFailure,
+} from "@/lib/interview/turn-client";
 
 // Mirrors DeliverySignals in lib/ai/adaptive.ts (kept local: no server imports).
 interface DeliverySignalsPayload {
@@ -175,18 +179,19 @@ const Agent = ({
     }, []),
   });
 
-  const { start: startListening, cancel: cancelListening } = speech;
+  const {
+    start: startListening,
+    cancel: cancelListening,
+    reopen: reopenAnswer,
+  } = speech;
 
   // ── Core interview conversation loop ────────────────────────────────────────
   const handleUserAnswer = useCallback(
     async (userAnswer: string, signals: DeliverySignalsPayload | null) => {
       if (!userAnswer || statusRef.current !== CallStatus.ACTIVE) return;
 
-      if (signals) {
-        spokenTurnsRef.current.push(userAnswer);
-        answerDurationsRef.current.push(signals.answerSeconds);
-      }
-
+      // Shown immediately; rolled back below if the turn fails so a retry
+      // doesn't leave the same answer in the transcript twice.
       const userMsg: SavedMessage = { role: "user", content: userAnswer };
       setMessages((prev) => [...prev, userMsg]);
       messagesRef.current = [...messagesRef.current, userMsg];
@@ -194,68 +199,74 @@ const Agent = ({
       setIsProcessing(true);
       setIsSubmitting(false);
 
-      try {
-        const res = await fetch("/api/interview/respond", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            role: role ?? "the role",
-            level: level ?? "",
-            type: interviewType ?? "Mixed",
-            questions,
-            userAnswer,
-            conversationHistory: messagesRef.current,
-            interviewState: interviewStateRef.current,
-            exchangeCount: exchangeCountRef.current,
-            activeQuestionIndex: activeQuestionIndexRef.current,
-            deliverySignals: signals ?? undefined,
-            companyMode,
-            codeSubmission: getCodeContext?.() ?? undefined,
-          }),
-        });
+      const result = await postInterviewTurn({
+        role: role ?? "the role",
+        level: level ?? "",
+        type: interviewType ?? "Mixed",
+        questions,
+        userAnswer,
+        conversationHistory: messagesRef.current,
+        interviewState: interviewStateRef.current,
+        exchangeCount: exchangeCountRef.current,
+        activeQuestionIndex: activeQuestionIndexRef.current,
+        deliverySignals: signals ?? undefined,
+        companyMode,
+        codeSubmission: getCodeContext?.() ?? undefined,
+      });
+      setIsProcessing(false);
 
-        if (res.status === 429) {
-          setIsProcessing(false);
-          toast.error("You've hit today's interview limit. Try again tomorrow.");
-          setCallStatus(CallStatus.FINISHED);
-          return;
+      if (result.kind === "rate_limited") {
+        toast.error("You've hit today's interview limit. Try again tomorrow.");
+        setCallStatus(CallStatus.FINISHED);
+        return;
+      }
+      if (result.kind === "unauthorized") {
+        toast.error("Your session expired. Please sign in again.");
+        router.push("/sign-in");
+        return;
+      }
+      if (result.kind === "failed") {
+        messagesRef.current = messagesRef.current.filter((m) => m !== userMsg);
+        setMessages((prev) => prev.filter((m) => m !== userMsg));
+        if (signals) {
+          // Spoken/typed answer: put it back so Send works again.
+          reopenAnswer(userAnswer);
+          toast.error(describeTurnFailure(result.reason));
+        } else {
+          toast.error("Couldn't send your code for review. Please submit it again.");
         }
-        if (res.status === 401) {
-          setIsProcessing(false);
-          toast.error("Your session expired. Please sign in again.");
-          router.push("/sign-in");
-          return;
-        }
-        if (!res.ok) throw new Error("API error");
+        return;
+      }
 
-        const data = await res.json();
-        const aiMsg: SavedMessage = { role: "assistant", content: data.aiResponse };
+      const data = result.data;
+      // Only count delivery once the answer has actually been accepted, so
+      // retries don't skew the speaking analytics.
+      if (signals) {
+        spokenTurnsRef.current.push(userAnswer);
+        answerDurationsRef.current.push(signals.answerSeconds);
+      }
 
-        setMessages((prev) => [...prev, aiMsg]);
-        messagesRef.current = [...messagesRef.current, aiMsg];
+      const aiMsg: SavedMessage = { role: "assistant", content: data.aiResponse };
+      setMessages((prev) => [...prev, aiMsg]);
+      messagesRef.current = [...messagesRef.current, aiMsg];
 
-        if (data.interviewState) interviewStateRef.current = data.interviewState;
-        if (typeof data.exchangeCount === "number") {
-          exchangeCountRef.current = data.exchangeCount;
-        }
-        if (typeof data.activeQuestionIndex === "number") {
-          activeQuestionIndexRef.current = data.activeQuestionIndex;
-          onActiveQuestionChange?.(data.activeQuestionIndex);
-        }
+      if (data.interviewState) {
+        interviewStateRef.current = data.interviewState as InterviewState;
+      }
+      if (typeof data.exchangeCount === "number") {
+        exchangeCountRef.current = data.exchangeCount;
+      }
+      if (typeof data.activeQuestionIndex === "number") {
+        activeQuestionIndexRef.current = data.activeQuestionIndex;
+        onActiveQuestionChange?.(data.activeQuestionIndex);
+      }
 
-        setIsProcessing(false);
-        await speakText(data.aiResponse);
+      await speakText(data.aiResponse);
 
-        if (data.isFinished) {
-          setCallStatus(CallStatus.FINISHED);
-        } else if (statusRef.current === CallStatus.ACTIVE) {
-          startListening();
-        }
-      } catch {
-        setIsProcessing(false);
-        toast.error(
-          "Couldn't reach the interviewer. Check your connection — your answer is still here, press Send to retry."
-        );
+      if (data.isFinished) {
+        setCallStatus(CallStatus.FINISHED);
+      } else if (statusRef.current === CallStatus.ACTIVE) {
+        startListening();
       }
     },
     [
@@ -269,6 +280,7 @@ const Agent = ({
       router,
       speakText,
       startListening,
+      reopenAnswer,
     ]
   );
 
@@ -316,19 +328,25 @@ const Agent = ({
         answerDurationsRef.current
       );
 
-      const { success, feedbackId: newFeedbackId } = await createFeedback({
+      // A thrown server action (network drop, function timeout) must not
+      // strand the candidate on a finished interview screen.
+      const result = await createFeedback({
         interviewId: interviewId!,
         userId: userId!,
         transcript: messagesRef.current,
         feedbackId,
         speakingAnalytics,
         finalCode: getCodeContext?.() ?? undefined,
-      });
+      }).catch(() => null);
 
-      if (success && newFeedbackId) {
+      if (result?.success && result.feedbackId) {
         router.push(`/interview/${interviewId}/feedback`);
       } else {
-        toast.error("Couldn't save your feedback. Returning to the dashboard.");
+        toast.error(
+          result?.error === "rate_limited"
+            ? "You've reached today's feedback limit. Try again tomorrow."
+            : "Couldn't save your feedback. Returning to the dashboard."
+        );
         router.push("/");
       }
     };
