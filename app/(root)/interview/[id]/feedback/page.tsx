@@ -79,7 +79,14 @@ const Page = async ({ params }: RouteParams) => {
                   {score}/100
                 </p>
               </div>
-              <div className="w-full bg-dark-300 rounded-full h-2">
+              <div
+                className="w-full bg-dark-300 rounded-full h-2"
+                role="progressbar"
+                aria-label={`${name} score`}
+                aria-valuenow={score}
+                aria-valuemin={0}
+                aria-valuemax={100}
+              >
                 <div
                   className={cn(
                     "h-2 rounded-full transition-all",

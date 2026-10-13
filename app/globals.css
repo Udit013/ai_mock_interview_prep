@@ -14,7 +14,7 @@
   --color-primary-200: #cac5fe;
 
   --color-light-100: #d6e0ff;
-  --color-light-400: #6870a6;
+  --color-light-400: #8a92c4; /* was #6870a6: 3.6:1 on cards, below WCAG AA */
   --color-light-600: #4f557d;
   --color-light-800: #24273a;
 
@@ -140,6 +140,8 @@
   }
   html {
     scroll-behavior: smooth;
+    /* Keep anchored content clear of the sticky header. */
+    scroll-padding-top: 5.5rem;
     scrollbar-color: var(--color-light-600) transparent;
   }
   body {
@@ -438,7 +440,7 @@ section {
   z-index: 40;
   margin-inline: -1rem;
   padding: 1rem;
-  background: linear-gradient(to bottom, rgba(8, 9, 13, 0.85), rgba(8, 9, 13, 0.55));
+  background: rgba(8, 9, 13, 0.82);
   backdrop-filter: blur(14px) saturate(140%);
   -webkit-backdrop-filter: blur(14px) saturate(140%);
   border-bottom: 1px solid rgba(255, 255, 255, 0.05);
@@ -455,11 +457,14 @@ section {
     padding-inline: 4rem;
   }
 }
+/* Layered so utilities such as max-sm:hidden still win over it. */
+@layer components {
 .nav-link {
   display: inline-flex;
   align-items: center;
   min-height: 2.5rem;
   padding: 0 0.85rem;
+  white-space: nowrap;
   border-radius: 9999px;
   font-size: 0.875rem;
   color: var(--color-light-100);
@@ -471,6 +476,14 @@ section {
   opacity: 1;
   color: white;
   background: rgba(255, 255, 255, 0.06);
+}
+
+@media (max-width: 639px) {
+  .nav-link {
+    padding: 0 0.55rem;
+    font-size: 0.8rem;
+  }
+}
 }
 
 /* ── Typography helpers ────────────────────────────────────────────────────── */

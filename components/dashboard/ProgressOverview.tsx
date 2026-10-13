@@ -72,9 +72,9 @@ const ScoreTrend = ({ points }: { points: ScorePoint[] }) => {
           r={3.5}
           className="fill-primary-100"
         >
-          <title>
-            {dayjs(p.date).format("MMM D, YYYY")}: {p.score}/100
-          </title>
+          {/* One string child: React 19 rejects multi-node <title> content,
+              which caused a hydration mismatch on the dashboard. */}
+          <title>{`${dayjs(p.date).format("MMM D, YYYY")}: ${p.score}/100`}</title>
         </circle>
       ))}
     </svg>

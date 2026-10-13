@@ -20,8 +20,8 @@ const RootLayout = async ({ children }: { children: ReactNode }) => {
             className="flex items-center gap-2 rounded-lg"
             aria-label="PrepWise home"
           >
-            <Image src="/logo.svg" alt="" width={38} height={32} priority />
-            <span className="text-primary-100 text-2xl sm:text-3xl font-semibold">
+            <Image src="/logo.svg" alt="" width={38} height={32} priority className="max-sm:w-8 h-auto" />
+            <span className="text-primary-100 text-xl sm:text-3xl font-semibold">
               PrepWise
             </span>
           </Link>

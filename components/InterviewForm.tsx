@@ -138,9 +138,9 @@ const InterviewForm = () => {
 
   return (
     <div className="card-border w-full max-w-2xl mx-auto">
-      <div className="card flex flex-col gap-6 py-10 px-8">
+      <div className="card flex flex-col gap-6 py-10 px-8 max-sm:px-5 max-sm:py-8">
         <div className="flex flex-col gap-1">
-          <h3>Create Your Interview</h3>
+          <h2 className="text-2xl">Interview details</h2>
           <p className="text-light-400">
             Fill in the details below and we&apos;ll generate tailored
             questions for you.
@@ -241,7 +241,7 @@ const InterviewForm = () => {
         <Form {...form}>
           <form
             onSubmit={form.handleSubmit(onSubmit)}
-            className="flex flex-col gap-5"
+            className="form flex flex-col gap-5"
           >
             <FormField
               control={form.control}
@@ -252,10 +252,11 @@ const InterviewForm = () => {
 
             <div className="flex gap-4 max-sm:flex-col">
               <div className="flex flex-col gap-2 flex-1">
-                <label className="label">Experience Level</label>
+                <label className="label" htmlFor="interview-level">Experience Level</label>
                 <select
+                  id="interview-level"
                   {...form.register("level")}
-                  className="input bg-dark-200 text-white border border-dark-300 rounded-lg px-3 py-2"
+                  className="input bg-dark-200 text-white border border-white/5 rounded-full min-h-12 px-5 cursor-pointer transition-colors hover:border-white/15"
                 >
                   <option value="Junior">Junior</option>
                   <option value="Mid">Mid-level</option>
@@ -264,10 +265,11 @@ const InterviewForm = () => {
               </div>
 
               <div className="flex flex-col gap-2 flex-1">
-                <label className="label">Interview Type</label>
+                <label className="label" htmlFor="interview-type">Interview Type</label>
                 <select
+                  id="interview-type"
                   {...form.register("type")}
-                  className="input bg-dark-200 text-white border border-dark-300 rounded-lg px-3 py-2"
+                  className="input bg-dark-200 text-white border border-white/5 rounded-full min-h-12 px-5 cursor-pointer transition-colors hover:border-white/15"
                 >
                   <option value="Technical">Technical</option>
                   <option value="Behavioral">Behavioral</option>
@@ -279,10 +281,12 @@ const InterviewForm = () => {
             </div>
 
             <div className="flex flex-col gap-2">
-              <label className="label">Company Style (optional)</label>
+              <label className="label" htmlFor="interview-company">Company Style (optional)</label>
               <select
+                id="interview-company"
+                aria-describedby="interview-company-hint"
                 {...form.register("companyMode")}
-                className="input bg-dark-200 text-white border border-dark-300 rounded-lg px-3 py-2"
+                className="input bg-dark-200 text-white border border-white/5 rounded-full min-h-12 px-5 cursor-pointer transition-colors hover:border-white/15"
               >
                 <option value="">Generic interview</option>
                 <optgroup label="Software">
@@ -304,7 +308,7 @@ const InterviewForm = () => {
                     ))}
                 </optgroup>
               </select>
-              <p className="text-xs text-light-400">
+              <p id="interview-company-hint" className="text-xs text-light-400">
                 Tailors the interviewer&apos;s style, question emphasis, and
                 evaluation criteria to that company&apos;s real process.
               </p>
@@ -327,13 +331,14 @@ const InterviewForm = () => {
             )}
 
             <div className="flex flex-col gap-2">
-              <label className="label">
+              <label className="label" htmlFor="interview-amount">
                 Number of Questions:{" "}
                 <span className="text-primary-100 font-bold">
                   {form.watch("amount")}
                 </span>
               </label>
               <input
+                id="interview-amount"
                 type="range"
                 min={3}
                 max={15}
@@ -348,8 +353,12 @@ const InterviewForm = () => {
             </div>
 
             <div className="flex flex-col gap-2">
-              <label className="label">Visibility</label>
-              <div className="flex gap-2 rounded-lg bg-dark-200 p-1">
+              <span className="label" id="interview-visibility">Visibility</span>
+              <div
+                role="group"
+                aria-labelledby="interview-visibility"
+                className="flex gap-2 rounded-lg bg-dark-200 p-1"
+              >
                 {(["public", "private"] as const).map((v) => (
                   <button
                     key={v}

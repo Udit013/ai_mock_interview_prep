@@ -40,7 +40,7 @@ const Page = async () => {
   return (
     <>
       <section className="card-cta">
-        <div className="flex flex-col gap-6 max-w-lg">
+        <div className="flex flex-col gap-6 max-w-lg flex-1 min-w-0">
           <span className="eyebrow">AI interview coach</span>
           <h1 className="hero-title">
             Get interview-ready with AI-powered practice &amp; feedback
@@ -60,7 +60,7 @@ const Page = async () => {
           width={400}
           height={400}
           priority
-          className="max-sm:hidden float-slow drop-shadow-[0_20px_60px_rgba(202,197,254,0.25)]"
+          className="max-md:hidden shrink-0 w-[clamp(220px,30vw,400px)] h-auto float-slow drop-shadow-[0_20px_60px_rgba(202,197,254,0.25)]"
         />
       </section>
 
