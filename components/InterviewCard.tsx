@@ -14,14 +14,14 @@ const InterviewCard = ({ interviewId, role, type, techstack, createdAt, feedback
     const isPrivate = visibility === 'private';
 
     return (
-        <div className="card-border w-[360px] max-sm:w-full min-h-96">
+        <article className="card-border w-full min-h-96">
             <div className="card-interview">
               <div>
                   <div className="absolute top-0 right-0 w-fit px-4 py-2 rounded-bl-lg bg-light-600">
                       <p className="badge-text">{normalizedType}</p>
                   </div>
 
-                  <Image src={cover} alt="" width={90} height={90} className="rounded-full object-fit size-[90px]" />
+                  <Image src={cover} alt="" width={90} height={90} className="rounded-full object-cover size-[90px] ring-2 ring-primary-200/20" />
 
                   {visibility && (
                       <span
@@ -32,7 +32,8 @@ const InterviewCard = ({ interviewId, role, type, techstack, createdAt, feedback
                                   : "bg-success-100/20 text-success-100"
                           )}
                       >
-                          {isPrivate ? "🔒 Private" : "🌐 Public"}
+                          <span aria-hidden="true">{isPrivate ? "🔒" : "🌐"}</span>
+                          {isPrivate ? "Private" : "Public"}
                       </span>
                   )}
 
@@ -42,13 +43,15 @@ const InterviewCard = ({ interviewId, role, type, techstack, createdAt, feedback
 
                   <div className="flex flex-row gap-5 mt-3">
                       <div className="flex flex-row gap-2">
-                          <Image src="/calendar.svg" alt="calendar" width={22} height={22} />
+                          <Image src="/calendar.svg" alt="" width={22} height={22} />
+                          <span className="sr-only">Date:</span>
                           <p>{formattedDate}</p>
                       </div>
 
                       <div className="flex flex-row gap-2 items-center">
-               <Image src="/star.svg" alt="star" width={22} height={22} />
-                          <p>{feedback?.totalScore || '---'}/100</p>
+               <Image src="/star.svg" alt="" width={22} height={22} />
+                          <span className="sr-only">Score:</span>
+                          <p>{feedback?.totalScore ?? '---'}/100</p>
                       </div>
                   </div>
 
@@ -57,10 +60,10 @@ const InterviewCard = ({ interviewId, role, type, techstack, createdAt, feedback
                   </p>
               </div>
 
-                <div className="flex flex-row justify-between">
+                <div className="flex flex-row flex-wrap items-center justify-between gap-3">
                     <DisplayTechIcons techStack={techstack} />
 
-                    <Button className="btn-primary">
+                    <Button asChild className="btn-primary">
                         <Link href={feedback
                             ? `/interview/${interviewId}/feedback`
                             : `/interview/${interviewId}`
@@ -70,7 +73,7 @@ const InterviewCard = ({ interviewId, role, type, techstack, createdAt, feedback
                     </Button>
                 </div>
             </div>
-        </div>
+        </article>
     )
 }
 export default InterviewCard

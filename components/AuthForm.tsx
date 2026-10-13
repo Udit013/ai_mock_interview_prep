@@ -25,6 +25,27 @@ const authFormSchema = (type: FormType) => {
     })
 }
 
+/** Friendly copy for the Firebase Auth errors users actually hit. */
+const describeAuthError = (error: unknown): string => {
+    const code = (error as { code?: string })?.code ?? '';
+    switch (code) {
+        case 'auth/invalid-credential':
+        case 'auth/wrong-password':
+        case 'auth/user-not-found':
+            return 'Incorrect email or password.';
+        case 'auth/email-already-in-use':
+            return 'An account with this email already exists. Sign in instead.';
+        case 'auth/weak-password':
+            return 'Please choose a stronger password (at least 6 characters).';
+        case 'auth/too-many-requests':
+            return 'Too many attempts. Please wait a moment and try again.';
+        case 'auth/network-request-failed':
+            return 'Network error. Check your connection and try again.';
+        default:
+            return 'Something went wrong. Please try again.';
+    }
+}
+
 const AuthForm = ({ type }: { type: FormType }) => {
     const router = useRouter();
     const formSchema = authFormSchema(type);
@@ -70,35 +91,44 @@ const AuthForm = ({ type }: { type: FormType }) => {
                     return;
                 }
 
-                await signIn({
+                // signIn returns { success: false } on failure instead of
+                // throwing — previously that was ignored and "success" shown.
+                const result = await signIn({
                     email, idToken
                 })
+                if (result && result.success === false) {
+                    toast.error(result.message ?? 'Sign in failed. Please try again.');
+                    return;
+                }
 
-                toast.success('Sign in successfully.');
+                toast.success('Signed in successfully.');
                 router.push('/')
             }
         } catch (error) {
-            console.log(error);
-            toast.error(`There was an error: ${error}`)
+            console.error(error);
+            toast.error(describeAuthError(error))
         }
     }
 
     const isSignIn = type === 'sign-in';
 
     return (
-        <div className="card-border lg:min-w-[566px]">
-            <div className="flex flex-col gap-6 card py-14 px-10">
+        <div className="card-border w-full max-w-[566px] fade-up">
+            <div className="flex flex-col gap-6 card py-14 px-10 max-sm:py-10 max-sm:px-6">
                 <div className="flex flex-row gap-2 justify-center">
                     <Image
                         src="/logo.svg"
-                        alt="logo"
+                        alt=""
                         height={32}
                         width={38}
                     />
-                    <h2 className="text-primary-100">PrepWise</h2>
+                    <span className="text-primary-100 text-3xl font-semibold">PrepWise</span>
                 </div>
 
-                <h3>Practice job interview with AI</h3>
+                <h1 className="text-2xl font-semibold text-center text-balance">
+                    {isSignIn ? 'Welcome back' : 'Create your account'}
+                </h1>
+                <p className="text-center text-light-400 -mt-3">Practice job interviews with an AI interviewer</p>
 
                 <Form {...form}>
                     <form onSubmit={form.handleSubmit(onSubmit)} className="w-full space-y-6 mt-4 form">
@@ -108,6 +138,7 @@ const AuthForm = ({ type }: { type: FormType }) => {
                                 name="name"
                                 label="Name"
                                 placeholder="Your Name"
+                                autoComplete="name"
                             />
                         )}
                         <FormField
@@ -116,6 +147,7 @@ const AuthForm = ({ type }: { type: FormType }) => {
                             label="Email"
                             placeholder="Your email address"
                             type="email"
+                            autoComplete="email"
                         />
 
                         <FormField
@@ -124,15 +156,20 @@ const AuthForm = ({ type }: { type: FormType }) => {
                             label="Password"
                             placeholder="Enter your password"
                             type="password"
+                            autoComplete={isSignIn ? 'current-password' : 'new-password'}
                         />
 
-                        <Button className="btn" type="submit">{isSignIn ? 'Sign in' : 'Create an Account'}</Button>
+                        <Button className="btn" type="submit" disabled={form.formState.isSubmitting} aria-busy={form.formState.isSubmitting}>
+                            {form.formState.isSubmitting
+                                ? (isSignIn ? 'Signing in…' : 'Creating account…')
+                                : (isSignIn ? 'Sign in' : 'Create an Account')}
+                        </Button>
                     </form>
                 </Form>
                 
                 <p className="text-center">
                     {isSignIn ? 'No account yet?' : 'Have an account already?'}
-                    <Link href={!isSignIn ? '/sign-in' : '/sign-up'} className="font-bold text-user-primary ml-1">
+                    <Link href={!isSignIn ? '/sign-in' : '/sign-up'} className="font-bold text-primary-200 ml-1 underline-offset-4 hover:underline">
                         {!isSignIn ? "Sign in" : 'Sign up'}
                     </Link>
                 </p>
