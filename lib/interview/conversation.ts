@@ -169,7 +169,7 @@ export function limitToOneQuestion(line: string): string {
 
 /** Openers that sound like grading or filler rather than listening. */
 const SCRIPTED_OPENERS =
-  /^(?:that'?s an? (?:great|good|solid|clear|excellent|interesting|fair|thorough|nice|strong)\b|great\b|excellent\b|fantastic\b|absolutely\b|thank you for sharing|thanks for sharing|building on that|interesting\b)/i;
+  /^(?:(?:that'?s|that is|this is|those are|these are)(?: (?:an?|some|really|very))* (?:great|good|solid|clear|excellent|interesting|fair|thorough|nice|strong)\b|great\b|excellent\b|fantastic\b|absolutely\b|thank you for sharing|thanks for sharing|building on that|interesting\b)/i;
 
 export function hasScriptedOpener(line: string): boolean {
   return SCRIPTED_OPENERS.test(line.trim());

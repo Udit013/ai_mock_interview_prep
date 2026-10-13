@@ -180,6 +180,8 @@ describe("hasScriptedOpener", () => {
       "Great answer! Now…",
       "Thank you for sharing that.",
       "Absolutely, and…",
+      "Those are solid tools for handling UI lag.",
+      "That is a really good approach.",
     ]) {
       expect(hasScriptedOpener(line)).toBe(true);
     }

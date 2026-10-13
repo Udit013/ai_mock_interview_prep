@@ -1,6 +1,6 @@
 import { generateObject } from "ai";
-import { google } from "@ai-sdk/google";
 import { aiAbortSignal } from "@/lib/ai/limits";
+import { MODEL_MAX_RETRIES, withModelFallback } from "@/lib/ai/models";
 import { z } from "zod";
 
 /**
@@ -84,8 +84,9 @@ export type ResumeImprovements = z.infer<typeof resumeImprovementSchema>;
 export async function generateResumeImprovements(
   resume: ResumeSchema
 ): Promise<ResumeImprovements> {
-  const { object } = await generateObject({
-    model: google("gemini-2.5-flash"),
+  const { object } = await withModelFallback("interview", (model) => generateObject({
+    model,
+    maxRetries: MODEL_MAX_RETRIES,
     abortSignal: aiAbortSignal(),
     schema: resumeImprovementSchema,
     prompt: `You are a blunt, expert résumé coach for software/consulting candidates.
@@ -101,7 +102,7 @@ Rules:
 - missingElements: what a recruiter would flag as absent.
 - atsKeywords: only keywords plausibly true given their experience.
 - overallAdvice: prioritized and candid, not generic praise.`,
-  });
+  }));
 
   return object;
 }
@@ -121,8 +122,9 @@ export async function structureResume(rawText: string): Promise<ResumeSchema> {
   // Cap the prompt size to keep latency/cost bounded on very long resumes.
   const truncated = text.slice(0, 12000);
 
-  const { object } = await generateObject({
-    model: google("gemini-2.5-flash"),
+  const { object } = await withModelFallback("interview", (model) => generateObject({
+    model,
+    maxRetries: MODEL_MAX_RETRIES,
     abortSignal: aiAbortSignal(),
     schema: resumeSchema,
     prompt: `You are an expert technical recruiter parsing a candidate's resume.
@@ -140,7 +142,7 @@ Raw resume text:
 """
 ${truncated}
 """`,
-  });
+  }));
 
   return object;
 }

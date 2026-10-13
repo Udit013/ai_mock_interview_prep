@@ -12,8 +12,8 @@
 import { randomBytes } from "crypto";
 import { db } from "@/firebase/admin";
 import { generateObject } from "ai";
-import { google } from "@ai-sdk/google";
 import { aiAbortSignal } from "@/lib/ai/limits";
+import { MODEL_MAX_RETRIES, withModelFallback } from "@/lib/ai/models";
 import { feedbackSchema } from "@/constants";
 import { companyPromptBlock } from "@/constants/companies";
 import { getCurrentUser } from "@/lib/actions/auth.action";
@@ -128,8 +128,9 @@ export async function createFeedback({
       ? `\nThe candidate's final submitted code (${finalCode.language}):\n\`\`\`\n${finalCode.code.slice(0, 20000)}\n\`\`\`\nInclude code quality (correctness, complexity, edge cases, readability) in your evaluation.\n`
       : "";
 
-    const { object: feedbackData } = await generateObject({
-      model: google("gemini-2.5-flash"),
+    const { object: feedbackData } = await withModelFallback("quality", (model) => generateObject({
+      model,
+      maxRetries: MODEL_MAX_RETRIES,
       abortSignal: aiAbortSignal(),
       schema: feedbackSchema,
       prompt: `You are an expert interview coach analyzing a mock job interview transcript.
@@ -163,7 +164,7 @@ Return:
   say so in the note.
 
 Be specific and constructive. Reference actual moments from the transcript when possible.`,
-    });
+    }));
 
     const feedbackRef = feedbackId
       ? db.collection("feedback").doc(feedbackId)

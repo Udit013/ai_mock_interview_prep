@@ -56,7 +56,7 @@ A full-stack, AI-powered interview platform that conducts **adaptive voice inter
 | Language | TypeScript (strict) |
 | Styling | Tailwind CSS |
 | Auth & Database | Firebase (Auth + Firestore) |
-| AI | Google **Gemini 2.5 Flash** (`@ai-sdk/google`, Vercel AI SDK) |
+| AI | Google **Gemini 3.5 Flash-Lite** with automatic fallback to 3.1 Flash-Lite (`@ai-sdk/google`, Vercel AI SDK) |
 | Voice I/O | Web Speech API (SpeechRecognition + SpeechSynthesis) |
 | Code editor | Monaco (`@monaco-editor/react`, lazy-loaded on the coding page only) |
 | Code execution | In-browser Web Worker sandbox (JS) + Pyodide/WASM (Python), lazy-loaded |
@@ -68,7 +68,7 @@ A full-stack, AI-powered interview platform that conducts **adaptive voice inter
 
 **Cost: $0** — Gemini free tier + Firebase Spark plan + browser-native voice APIs.
 
-> **Model note:** the code uses `gemini-2.5-flash`. Newer Google AI Studio keys have **zero free-tier quota for `gemini-2.0-flash`**, so 2.5 Flash is both the working and the more capable choice.
+> **Model note:** models are configured in `lib/ai/models.ts` and can be overridden with `GEMINI_MODEL`, `GEMINI_FALLBACK_MODEL` and `GEMINI_QUALITY_MODEL` — no code change needed. The defaults use the Flash-Lite models because their free tier allows 500 requests/day each (vs 20 for the Flash models), and when one model's quota runs out, requests automatically fall through to the next.
 
 ---
 
@@ -152,6 +152,11 @@ FIREBASE_PROJECT_ID=your-project-id
 FIREBASE_CLIENT_EMAIL=firebase-adminsdk-xxx@your-project.iam.gserviceaccount.com
 FIREBASE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n"
 GOOGLE_GENERATIVE_AI_API_KEY=your-gemini-key
+
+# Optional model overrides (defaults shown / unset)
+# GEMINI_MODEL=gemini-3.5-flash-lite
+# GEMINI_FALLBACK_MODEL=gemini-3.1-flash-lite
+# GEMINI_QUALITY_MODEL=gemini-3.8-flash
 ```
 
 > `.env.local` is gitignored. Voice and PDF parsing need no extra keys.

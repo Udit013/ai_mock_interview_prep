@@ -1,6 +1,6 @@
 import { generateObject } from "ai";
-import { google } from "@ai-sdk/google";
 import { aiAbortSignal } from "@/lib/ai/limits";
+import { MODEL_MAX_RETRIES, withModelFallback } from "@/lib/ai/models";
 import { z } from "zod";
 import {
   askedQuestions,
@@ -327,12 +327,13 @@ ${
 Update the interview state (carry forward prior strengths, weaknesses, and topics; add new ones; adjust estimatedConfidence and difficulty), choose an action, set activeQuestionIndex, and write spokenResponse.`;
 
   const generate = (extra = "") =>
-    generateObject({
-      model: google("gemini-2.5-flash"),
+    withModelFallback("interview", (model) => generateObject({
+      model,
+      maxRetries: MODEL_MAX_RETRIES,
       abortSignal: aiAbortSignal(),
       schema: adaptiveTurnSchema,
       prompt: prompt + extra,
-    }).then((r) => r.object);
+    })).then((r) => r.object);
 
   let object = await generate();
 

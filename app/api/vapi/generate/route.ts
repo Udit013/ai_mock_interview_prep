@@ -1,6 +1,6 @@
 import { generateText } from "ai";
-import { google } from "@ai-sdk/google";
 import { aiAbortSignal } from "@/lib/ai/limits";
+import { MODEL_MAX_RETRIES, withModelFallback } from "@/lib/ai/models";
 import { z } from "zod";
 import { getRandomInterviewCover } from "@/lib/utils";
 import { db } from "@/firebase/admin";
@@ -192,11 +192,12 @@ ${craftRules}
 
 ${outputRules}`;
 
-    const { text: questions } = await generateText({
-      model: google("gemini-2.5-flash"),
+    const { text: questions } = await withModelFallback("quality", (model) => generateText({
+      model,
+      maxRetries: MODEL_MAX_RETRIES,
       abortSignal: aiAbortSignal(),
       prompt,
-    });
+    }));
 
     // Gemini often wraps JSON in markdown fences (```json ... ```); strip them before parsing.
     const cleaned = questions

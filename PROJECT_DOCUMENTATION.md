@@ -88,7 +88,7 @@ Everything runs on free tiers by design:
 | Code execution service (Judge0) | Web Worker + Pyodide, runs in your own browser |
 | Chart library | Hand-written SVG |
 | Hosting + DB | Vercel Hobby + Firebase Spark |
-| LLM | Gemini 2.5 Flash free tier |
+| LLM | Gemini 3.5 Flash-Lite free tier (fallback: 3.1 Flash-Lite) |
 
 ---
 
@@ -788,13 +788,21 @@ Every Gemini call in the app, and the schema that guards it.
 
 | Call site | Function | Model | Output validated by |
 |---|---|---|---|
-| Question generation | `generateText` | `gemini-2.5-flash` | Manual JSON parse + fence stripping |
-| Interview turn | `generateObject` | `gemini-2.5-flash` | `adaptiveTurnSchema` |
-| Feedback scoring | `generateObject` | `gemini-2.5-flash` | `feedbackSchema` |
-| Résumé structuring | `generateObject` | `gemini-2.5-flash` | `resumeSchema` |
-| Résumé coaching | `generateObject` | `gemini-2.5-flash` | `resumeImprovementSchema` |
+| Question generation | `generateText` | model chain (§8) | Manual JSON parse + fence stripping |
+| Interview turn | `generateObject` | model chain (§8) | `adaptiveTurnSchema` |
+| Feedback scoring | `generateObject` | model chain (§8) | `feedbackSchema` |
+| Résumé structuring | `generateObject` | model chain (§8) | `resumeSchema` |
+| Résumé coaching | `generateObject` | model chain (§8) | `resumeImprovementSchema` |
 
-> **Model note:** the code uses `gemini-2.5-flash`. The project originally targeted `gemini-2.0-flash`, but newer Google AI Studio API keys carry **zero free-tier quota** for that specific model while having full quota for 2.5 Flash. The switch was driven by quota, verified against the live API, and kept because Flash's low latency genuinely suits real-time turn-taking.
+> **Model note — `lib/ai/models.ts`.** Every call goes through `withModelFallback(task, call)`, which walks a short chain of models and moves to the next one only on quota exhaustion (429) or a retired model id (404); timeouts and bad requests are rethrown. Free-tier quotas are per model, so the chain multiplies capacity.
+>
+> | Slot | Env var | Default | Free tier (RPM / RPD) |
+> |---|---|---|---|
+> | Main | `GEMINI_MODEL` | `gemini-3.5-flash-lite` | 15 / 500 |
+> | Fallback | `GEMINI_FALLBACK_MODEL` | `gemini-3.1-flash-lite` | 15 / 500 |
+> | Quality (generation + feedback only) | `GEMINI_QUALITY_MODEL` | unset | e.g. `gemini-3.8-flash`: 5 / 20 |
+>
+> History: the project started on `gemini-2.0-flash` (zero free quota on newer keys), moved to `gemini-2.5-flash`, then hit its **20 requests/day** project-wide cap during testing — about 1–2 interviews a day for all users combined. Measured on this project: Flash-Lite generated a question set in ~2.5 s (vs 8–10 s) and answered live turns in ~2–2.5 s (vs 4–7 s). `gemini-3.8-flash` was not made the default quality model because it "thinks" first: 7 s on a tiny prompt and over the 45 s timeout on the full generation prompt. Set `none` to disable the fallback or quality slot; the main slot can't be disabled. SDK retries are capped at 1 per model (`MODEL_MAX_RETRIES`) because the next model is a better retry than the same exhausted one.
 
 ## 8.1 The Adaptive Interview Engine — `lib/ai/adaptive.ts`
 
@@ -912,7 +920,7 @@ Prompting alone wasn't enough — live tests showed the model stacking two quest
 
 Question generation got the same treatment: the prompt plans the set so each question has a distinct focus and format (scenario, trade-off, debugging, past experience, design), orders it warm-up → core → stretch, and shows weak vs strong phrasings (marked as style-only after a live run copied an example verbatim). `sanitizeQuestions` now drops reworded duplicates, not just identical ones.
 
-**Quota note:** the Gemini free tier allows ~20 `gemini-2.5-flash` requests per project per day, shared by every user. That's why the only guard that calls the model again is the (rare) repeated-question case — everything else is fixed deterministically.
+**Quota note:** free-tier quotas are per project and shared by every user, so the only guard that calls the model again is the (rare) repeated-question case — everything else is fixed deterministically.
 
 ## 8.2 Company Modes — `constants/companies.ts`
 
@@ -957,7 +965,7 @@ export async function structureResume(rawText: string): Promise<ResumeSchema> {
   const text = rawText.trim();
   if (text.length < MIN_RESUME_TEXT_LENGTH) throw new ResumeTooShortError();
   const truncated = text.slice(0, 12000);   // bound prompt size
-  const { object } = await generateObject({ model: google("gemini-2.5-flash"),
+  const { object } = await withModelFallback("interview", (model) => generateObject({ model,
     schema: resumeSchema, prompt: /* … */ });
   return object;
 }
@@ -1063,7 +1071,7 @@ Three Route Handlers. All three share the same defense sequence: **auth → rate
      · Coding branch demands self-contained problems solvable in 15–25 min
      · System Design branch demands scale hints
      · companyPromptBlock injected if valid
-6. generateText(gemini-2.5-flash)
+6. withModelFallback("quality") → generateText
 7. Strip markdown fences → JSON.parse → string[]
 8. Resolve visibility: explicit ?? (source === "resume" ? "private" : "public")
 9. db.collection("interviews").add({ …, userId: user.id })
