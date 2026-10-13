@@ -2,6 +2,14 @@ import { generateObject } from "ai";
 import { google } from "@ai-sdk/google";
 import { aiAbortSignal } from "@/lib/ai/limits";
 import { z } from "zod";
+import {
+  askedQuestions,
+  extractQuestions,
+  isNearDuplicate,
+  limitToOneQuestion,
+  recentOpeners,
+  stripScriptedOpener,
+} from "@/lib/interview/conversation";
 
 /** Live model of how the interview is going, carried across turns. */
 export const interviewStateSchema = z.object({
@@ -25,9 +33,9 @@ export const STATE_ITEM_MAX_CHARS = 300;
  * and is pasted into every prompt, so without this a client (or a verbose
  * model) could grow each Gemini call without limit.
  */
-export function boundInterviewState(
-  state: InterviewStateSchema
-): InterviewStateSchema {
+export function boundInterviewState<T extends InterviewStateSchema>(
+  state: T
+): T {
   const trimList = (list: string[]) =>
     list.slice(-STATE_LIST_MAX).map((s) => s.slice(0, STATE_ITEM_MAX_CHARS));
   return {
@@ -50,6 +58,8 @@ export const interviewStateInputSchema = interviewStateSchema
     weaknesses: inputList,
     topicsCovered: inputList,
     followUpOpportunities: inputList,
+    // Server-maintained: consecutive turns spent on the current seed question.
+    topicTurns: z.number().int().min(0).max(50).optional(),
   })
   .transform(boundInterviewState);
 
@@ -166,7 +176,34 @@ interface RunAdaptiveTurnArgs {
   deliverySignals?: DeliverySignals;
   codeSubmission?: CodeSubmission;
   companyBlock?: string;
+  /** Seed question being discussed before this turn. */
+  activeQuestionIndex?: number;
+  /** Turns already spent on that seed question (follow-ups included). */
+  topicTurns?: number;
 }
+
+/** Follow-ups allowed on one seed question before moving on. */
+export const MAX_TURNS_PER_TOPIC = 3;
+
+/** Phrases that make an interviewer sound scripted. */
+const BANNED_PHRASES = [
+  "Great answer",
+  "Great question",
+  "That's a great point",
+  "Excellent",
+  "Absolutely",
+  "Thank you for sharing",
+  "Building on that",
+  "Let's dive",
+  "dive deeper",
+  "delve",
+  "Fantastic",
+  "Interesting!",
+  "That's a solid",
+  "That's a clear",
+  "That's a good",
+  "Could you elaborate",
+];
 
 /**
  * Run a single adaptive interview turn. Returns the spoken interviewer line,
@@ -175,7 +212,7 @@ interface RunAdaptiveTurnArgs {
  */
 export async function runAdaptiveTurn(
   args: RunAdaptiveTurnArgs
-): Promise<{ turn: AdaptiveTurn; isFinished: boolean }> {
+): Promise<{ turn: AdaptiveTurn; isFinished: boolean; topicTurns: number }> {
   const {
     role,
     level,
@@ -189,9 +226,26 @@ export async function runAdaptiveTurn(
     deliverySignals,
     codeSubmission,
     companyBlock,
+    activeQuestionIndex = 0,
+    topicTurns = 0,
   } = args;
 
   const mustFinish = exchangeCount >= maxExchanges;
+  const lastSeed = Math.max(seedQuestions.length - 1, 0);
+  const currentIndex = Math.min(Math.max(activeQuestionIndex, 0), lastSeed);
+  // Deterministic cap: after this many turns on one topic, the model is told
+  // it must move on, so no question gets drilled into the ground.
+  const mustMoveOn = topicTurns + 1 >= MAX_TURNS_PER_TOPIC;
+  const remainingSeeds = seedQuestions
+    .map((q, i) => ({ q, i }))
+    .filter(({ i }) => i > currentIndex);
+  const alreadyAsked = askedQuestions(conversationHistory);
+  const openersToAvoid = recentOpeners(conversationHistory);
+  // The very first word matters too: "Okay…" twice in a row sounds canned.
+  const lastFirstWord = recentOpeners(conversationHistory, 1, 1)[0]?.replace(
+    /[^A-Za-z']/g,
+    ""
+  );
 
   const historyText = conversationHistory
     .map(
@@ -218,31 +272,46 @@ export async function runAdaptiveTurn(
     ? `\nThe candidate just submitted this ${codeSubmission.language} code for review:\n\`\`\`${codeSubmission.language}\n${codeSubmission.code}\n\`\`\`\n`
     : "";
 
-  const prompt = `You are an expert, genuinely adaptive interviewer conducting a ${level} ${type} interview for a ${role} position. ${typeGuidance}
+  const prompt = `You are an experienced ${role} interviewer running a live ${level}-level ${type} interview over voice. You have interviewed hundreds of candidates: you are warm but rigorous, curious about how they think, and you talk like a person, not a script. ${typeGuidance}
 ${companyBlock ?? ""}${
     deliveryNote
       ? `\nDelivery observation for the candidate's last answer: ${deliveryNote}.
-React to delivery like a considerate human interviewer would: if they hesitated a long time or sound unsure, briefly reassure them or offer to rephrase before probing; if they were composed and fast, you can push harder. Fold delivery into your estimatedConfidence. Never recite these metrics back verbatim.\n`
+React to delivery like a considerate human would: if they hesitated a long time or sound unsure, briefly put them at ease before probing; if they were composed and quick, you can push harder. Fold delivery into estimatedConfidence. Never recite these metrics.\n`
       : ""
   }${codeBlock}
 
-You are given a backbone of seed questions to cover, but you adapt based on how the candidate is doing:
-- Strong, deep answer -> raise difficulty (action: increase_difficulty) or move on (next_topic).
-- Weak or vague answer -> ask a targeted follow-up (action: follow_up).
-- Missing fundamentals -> probe the basics (action: probe_basics).
-- Incomplete or unclear answer -> ask for clarification (action: clarify).
-- When the important topics are covered (or you are told to finish) -> wrap up (action: finish).
+HOW TO RUN THE CONVERSATION
+- Listen first. React to something SPECIFIC the candidate just said — a choice they made, a term they used, a gap you noticed — in a few words. Don't grade the answer out loud ("That's a solid plan", "That's a clear explanation"): real interviewers keep their verdict to themselves and respond to the content ("Okay, so the second write clobbered the first.", "Right — the lock is held until commit.").
+- Ask exactly ONE question, in ONE sentence, ending with a single question mark. Don't join two asks with "and" ("…tell me about X, and what Y?" is two questions — pick the more revealing one), and don't add a second question afterwards.
+- Follow-ups must come from their answer: pick the most interesting or weakest point ("You said you'd add an index on email — what happens to write performance?"). Don't ask a generic follow-up that could apply to anyone.
+- Adapt depth: a strong, specific answer earns a harder angle or a move to the next topic; a vague answer earns a pointed follow-up asking for a concrete example, number, or trade-off; missing fundamentals earn one simpler probing question.
+- When you change topic, bridge naturally in a short phrase so it doesn't feel abrupt, and put the next seed question in your own conversational words — don't read it verbatim if it sounds stiff, but keep its substance.
+- Never re-ask or lightly reword a question that has already been asked (list below).
+- If the candidate says they can't answer ("I don't know", "no idea", "skip"), don't push: acknowledge it in a kind, low-key way and move to the next uncovered seed question (action: next_topic).
+- Vary your phrasing. Do NOT start your response with any of these recent openings: ${
+    openersToAvoid.length ? openersToAvoid.map((o) => `"${o}…"`).join(", ") : "(none yet)"
+  }${
+    lastFirstWord ? `, and don't begin with the word "${lastFirstWord}" again` : ""
+  }. Avoid stock phrases such as ${BANNED_PHRASES.map((p) => `"${p}"`).join(", ")}.
+- Spoken style: contractions, plain words, 2-3 short sentences, under about 60 words. No markdown, lists, or numbering — it is read aloud.
 
-CRITICAL — if the candidate indicates they cannot answer (for example "I don't
-know", "no idea", "I'd rather skip this"), do NOT re-ask, rephrase, or nudge
-them on that question. Briefly and warmly acknowledge it, then move directly to
-the next uncovered seed question (action: next_topic). Never ask the same
-question twice, and never ask a question the candidate has already declined.
-
-Seed questions (the topics to ground the interview):
+INTERVIEW PLAN
+Seed questions (the backbone to cover, in order):
 ${seedQuestions.map((q, i) => `${i + 1}. ${q}`).join("\n")}
 
-Current interview state (your running assessment):
+You are currently on seed question ${currentIndex + 1} of ${seedQuestions.length} and have spent ${topicTurns + 1} turn(s) on it.
+${
+  mustMoveOn && remainingSeeds.length > 0
+    ? `You have explored this topic enough. You MUST now move to seed question ${remainingSeeds[0].i + 1} (action: next_topic) and set activeQuestionIndex to ${remainingSeeds[0].i}.`
+    : remainingSeeds.length > 0
+    ? `Remaining seed questions: ${remainingSeeds.map(({ i }) => i + 1).join(", ")}. Set activeQuestionIndex to the 0-based index of the seed question you are asking about.`
+    : `This is the last seed question. Once it is reasonably covered, wrap up (action: finish).`
+}
+
+Questions already asked (never repeat these, even reworded):
+${alreadyAsked.length ? alreadyAsked.map((q) => `- ${q}`).join("\n") : "- (none)"}
+
+Current running assessment:
 ${JSON.stringify(currentState)}
 
 Conversation so far:
@@ -251,24 +320,57 @@ Candidate: ${userAnswer}
 
 ${
   mustFinish
-    ? "IMPORTANT: The interview has reached its length limit. You MUST set action to \"finish\" and give a warm, professional closing (thank them, mention feedback is coming). Do not ask another question."
-    : "Decide the best next action, update your assessment of the candidate, and produce what you will say next."
+    ? "IMPORTANT: The interview has reached its length limit. Set action to \"finish\" and close the way a real interviewer would: a brief, genuine remark about the conversation, thanks, and that feedback is on its way. Do not ask another question."
+    : "Decide the best next action, update your assessment, and write what you say next."
 }
 
-Evaluate the candidate's most recent answer, update the interview state (carry forward prior strengths/weaknesses/topics and add new ones; adjust estimatedConfidence and difficulty), choose an action, and write the spoken response. The spoken response is read aloud, so use natural speech with no markdown, no bullet points, and no numbering. Keep it to 2-3 sentences.`;
+Update the interview state (carry forward prior strengths, weaknesses, and topics; add new ones; adjust estimatedConfidence and difficulty), choose an action, set activeQuestionIndex, and write spokenResponse.`;
 
-  const { object } = await generateObject({
-    model: google("gemini-2.5-flash"),
-    abortSignal: aiAbortSignal(),
-    schema: adaptiveTurnSchema,
-    prompt,
-  });
+  const generate = (extra = "") =>
+    generateObject({
+      model: google("gemini-2.5-flash"),
+      abortSignal: aiAbortSignal(),
+      schema: adaptiveTurnSchema,
+      prompt: prompt + extra,
+    }).then((r) => r.object);
+
+  let object = await generate();
+
+  // Repetition guard: one retry when the draft re-asks an earlier question.
+  // Rare, and the only fix that needs the model — so it's the only one that
+  // spends extra quota (the free tier allows ~20 requests/day).
+  const repeated = extractQuestions(object.spokenResponse).find((q) =>
+    isNearDuplicate(q, alreadyAsked)
+  );
+  if (repeated && !mustFinish) {
+    object = await generate(
+      `\n\nYour previous draft asked "${repeated}", which repeats an earlier question. Ask something genuinely new instead.`
+    );
+  }
+
+  // Free, deterministic polish: no graded opener, one question at a time.
+  object = {
+    ...object,
+    spokenResponse: limitToOneQuestion(stripScriptedOpener(object.spokenResponse)),
+  };
 
   // Deterministic termination: the cap wins over the model's choice.
   const isFinished = mustFinish || object.action === "finish";
 
+  // The question index only moves forward and stays in range, whatever the
+  // model returns, so progress can't loop back to an earlier topic.
+  const nextIndex = Math.min(
+    Math.max(object.activeQuestionIndex, currentIndex),
+    lastSeed
+  );
+
   return {
-    turn: { ...object, updatedState: boundInterviewState(object.updatedState) },
+    turn: {
+      ...object,
+      activeQuestionIndex: nextIndex,
+      updatedState: boundInterviewState(object.updatedState),
+    },
     isFinished,
+    topicTurns: nextIndex === currentIndex ? topicTurns + 1 : 0,
   };
 }

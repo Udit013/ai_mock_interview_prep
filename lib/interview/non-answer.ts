@@ -14,6 +14,8 @@
  * (instant UI feedback) and the server (authoritative decision).
  */
 
+import { buildTransition } from "@/lib/interview/conversation";
+
 /** Above this many words, treat it as a genuine attempt regardless of wording. */
 const MAX_WORDS = 12;
 
@@ -157,9 +159,10 @@ export function isNonAnswer(raw: string): boolean {
 
 /** Varied acknowledgements so a skipped question never sounds robotic. */
 const SKIP_ACKNOWLEDGEMENTS = [
+  // Acknowledgement only — the transition that follows does the moving on.
   "No problem at all — that's a tough one.",
   "That's completely fine, it happens.",
-  "No worries, let's keep moving.",
+  "No worries.",
   "That's alright — not everyone has covered that.",
   "Understood, no problem.",
 ];
@@ -178,7 +181,7 @@ export function buildSkipResponse(
   if (!nextQuestion) {
     return `${ack} That was the last thing I wanted to cover, so let's wrap up there. Thanks for your time — I'll put your feedback together now.`;
   }
-  return `${ack} Let's move on. ${nextQuestion}`;
+  return `${ack} ${buildTransition(seed)} ${nextQuestion}`;
 }
 
 export interface SkipTurnPlan {

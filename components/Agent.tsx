@@ -15,6 +15,7 @@ import {
   useSpeechRecognition,
   type SpeechTiming,
 } from "@/hooks/useSpeechRecognition";
+import { buildOpening } from "@/lib/interview/conversation";
 import {
   postInterviewTurn,
   describeTurnFailure,
@@ -378,11 +379,12 @@ const Agent = ({
     const spokenOpening = isCoding
       ? `Hi ${userName}, welcome. The problem is on your screen — take a moment to read it. ` +
         `When you're ready, walk me through your approach before you start coding.`
-      : `Hello ${userName}! Welcome to your mock interview. ` +
-        `I'll be asking you ${questions.length} ` +
-        `${questions.length === 1 ? "question" : "questions"} today. ` +
-        `Take your time with each answer. Let's get started. ` +
-        `Here's your first question: ${questions[0] ?? ""}`;
+      : buildOpening({
+          userName,
+          role,
+          questionCount: questions.length,
+          firstQuestion: questions[0] ?? "",
+        });
 
     // The transcript still records the problem so feedback and replay have it.
     const recordedOpening = isCoding
@@ -402,7 +404,7 @@ const Agent = ({
       // is never stuck. The hook surfaces the reason in `speech.error`.
       if (!started) speech.beginTypedAnswer();
     }
-  }, [userName, questions, isCoding, speakText, startListening, speech]);
+  }, [userName, role, questions, isCoding, speakText, startListening, speech]);
 
   const handleEnd = useCallback(() => {
     cancelListening();

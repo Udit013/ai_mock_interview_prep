@@ -897,6 +897,23 @@ Five interview types each swap in different guidance. The Coding one carries a r
    instead (e.g. \"the two-sum problem\") and move straight to discussion…"
 ```
 
+### Making it sound like a real interviewer
+
+Prompting alone wasn't enough — live tests showed the model stacking two questions per turn, grading answers aloud ("That's a solid plan…"), and opening every turn the same way. So realism is split between the prompt and deterministic code in `lib/interview/conversation.ts`:
+
+| Concern | Prompt asks for | Code guarantees |
+|---|---|---|
+| Repeated questions | "never re-ask, even reworded" + the list of questions already asked | `isNearDuplicate` (content-word Jaccard ≥ 0.6) triggers one regeneration |
+| Drilling one topic forever | follow-ups only on real gaps | `MAX_TURNS_PER_TOPIC = 3`, tracked server-side as `topicTurns`; the prompt is then told it MUST move on |
+| Jumping back to old topics | — | `activeQuestionIndex` only moves forward and is clamped to the seed list |
+| Multi-part questions | one question, one sentence | `limitToOneQuestion` keeps only the first `?` |
+| Scripted openers | recent openers + previous first word are listed as off-limits; banned stock phrases | `stripScriptedOpener` drops a graded first sentence for free (no extra model call) |
+| Robotic opening / skips | — | `buildOpening` and `buildTransition` vary the greeting, framing and bridges |
+
+Question generation got the same treatment: the prompt plans the set so each question has a distinct focus and format (scenario, trade-off, debugging, past experience, design), orders it warm-up → core → stretch, and shows weak vs strong phrasings (marked as style-only after a live run copied an example verbatim). `sanitizeQuestions` now drops reworded duplicates, not just identical ones.
+
+**Quota note:** the Gemini free tier allows ~20 `gemini-2.5-flash` requests per project per day, shared by every user. That's why the only guard that calls the model again is the (rare) repeated-question case — everything else is fixed deterministically.
+
 ## 8.2 Company Modes — `constants/companies.ts`
 
 Nine companies, one registry, zero branching logic.

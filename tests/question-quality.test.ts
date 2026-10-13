@@ -112,3 +112,26 @@ describe("meetsMinimumCount", () => {
     expect(meetsMinimumCount(3, 3)).toBe(true);
   });
 });
+
+describe("sanitizeQuestions — reworded duplicates", () => {
+  it("drops a question that asks the same thing in different words", () => {
+    const { questions, issues } = sanitizeQuestions([
+      "How would you cache API responses in a busy service?",
+      "What's your approach to caching API responses in a busy service?",
+      "How would you invalidate that cache when the data changes?",
+    ]);
+    expect(questions).toHaveLength(2);
+    expect(issues.some((i) => i.includes("reworded"))).toBe(true);
+  });
+
+  it("keeps a varied, realistic question set intact", () => {
+    const set = [
+      "A page that used to load in 300 milliseconds now takes three seconds after a release. Where do you start looking?",
+      "Say a teammate proposes splitting our monolith into microservices next quarter. What would you want to know before agreeing?",
+      "Which part of a project you've built would you redesign today, and why?",
+      "How would you stop a payment endpoint from charging a customer twice when the client retries?",
+      "Tell me about a time you disagreed with a technical decision on your team.",
+    ];
+    expect(sanitizeQuestions(set).questions).toEqual(set);
+  });
+});

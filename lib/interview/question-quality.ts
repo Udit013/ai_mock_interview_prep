@@ -6,11 +6,15 @@
  *  - numbering leaking into the text ("1. Tell me about…", "Q2: …")
  *  - markdown bullets / stray quotes
  *  - near-duplicate questions ("What is an index?" vs "What is an index")
+ *  - the same question reworded ("How would you cache API responses?" vs
+ *    "What's your approach to caching responses from an API?")
  *  - fragments too short to be a real question
  *  - the model returning fewer questions than asked
  *
  * Pure and dependency-free so it is unit-testable.
  */
+
+import { isNearDuplicate } from "@/lib/interview/conversation";
 
 /** Shorter than this and it isn't a usable interview question. */
 const MIN_QUESTION_LENGTH = 15;
@@ -76,6 +80,10 @@ export function sanitizeQuestions(raw: unknown): SanitizedQuestions {
     }
     if (seen.has(key)) {
       issues.push(`Dropped duplicate: "${cleaned.slice(0, 40)}"`);
+      continue;
+    }
+    if (isNearDuplicate(cleaned, questions)) {
+      issues.push(`Dropped reworded duplicate: "${cleaned.slice(0, 40)}"`);
       continue;
     }
 

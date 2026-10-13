@@ -134,6 +134,7 @@ export async function POST(request: Request) {
           // An unanswered question is evidence, but one blank shouldn't tank
           // the running estimate — nudge it down rather than collapse it.
           estimatedConfidence: clamp(state.estimatedConfidence - 8, 0, 100),
+          topicTurns: 0, // the skip moved on to a new question
         },
         action: plan.action,
         activeQuestionIndex: plan.activeQuestionIndex,
@@ -143,7 +144,7 @@ export async function POST(request: Request) {
       });
     }
 
-    const { turn, isFinished } = await runAdaptiveTurn({
+    const { turn, isFinished, topicTurns } = await runAdaptiveTurn({
       role: role || "the role",
       level: level || "the",
       type: type || "Mixed",
@@ -156,12 +157,14 @@ export async function POST(request: Request) {
       deliverySignals,
       codeSubmission,
       companyBlock: companyPromptBlock(companyMode),
+      activeQuestionIndex,
+      topicTurns: interviewState?.topicTurns ?? 0,
     });
 
     return Response.json({
       success: true,
       aiResponse: turn.spokenResponse.trim(),
-      interviewState: turn.updatedState,
+      interviewState: { ...turn.updatedState, topicTurns },
       action: turn.action,
       activeQuestionIndex: turn.activeQuestionIndex,
       exchangeCount: answersGiven,

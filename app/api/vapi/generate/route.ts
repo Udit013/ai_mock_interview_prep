@@ -132,48 +132,65 @@ export async function POST(request: Request) {
 
     const typeInstructions =
       type === "Coding"
-        ? `Each question must be a self-contained coding problem: a short scenario, the task, input/output expectations, and one example. The candidate will solve it in a code editor while talking, so make problems solvable in 15-25 minutes and speakable aloud.`
+        ? `Each question must be a self-contained coding problem: a short realistic scenario, the task, input/output expectations, and one example. The candidate solves it in an editor while talking, so make each solvable in 15-25 minutes. Vary the problem families (e.g. arrays/strings, hashing, trees/graphs, intervals, design-a-class) — never two problems that use the same core technique.`
         : type === "System Design"
-        ? `Each question should be an open-ended system design prompt (e.g. "Design a URL shortener for 100M users"). Include a hint of scale so the candidate must estimate and make trade-offs.`
+        ? `Each question should be an open-ended system design prompt framed as a real product need with a hint of scale (users, traffic, data size), so the candidate must clarify requirements, estimate, and make trade-offs. Cover different kinds of systems (e.g. read-heavy, write-heavy, real-time, storage-heavy) rather than variations of one.`
+        : type === "Behavioral"
+        ? `These are behavioral questions. Each must target a different competency (e.g. ownership, conflict, ambiguity, failure, influence, prioritisation, feedback) and ask for one specific real situation. Do not open more than two questions with "Tell me about a time".`
         : "";
 
+    // The same craft rules apply to manual and résumé interviews.
+    const craftRules = `How a strong human interviewer writes these:
+- Plan the set first: give every question a DIFFERENT focus area. No two questions may test the same concept, even if worded differently.
+- Mix formats across the set: a real-world scenario, a trade-off or "what would you choose and why", a debugging or "what went wrong" situation, a past-experience question, and (for senior levels) a design or judgement call.
+- Order them like a real interview: one approachable warm-up first, then core questions, then one or two stretch questions at the end. Pitch the difficulty at a ${level} candidate.
+- Write each as it would be SPOKEN by an experienced interviewer: conversational, direct, under 45 words (coding problems may be longer). Ask one thing — at most a single "and why?" or "what would you change?" add-on.
+- Ground questions in realistic situations from the role's day-to-day work instead of textbook definitions ("What is latency?").
+- Never start two questions with the same three words. Avoid robotic openers like "Can you explain", "Describe the concept of", "What are the key characteristics of", "Discuss".
+
+Weak (do not write like this):
+- "Can you explain what a REST API is?"
+- "What are the advantages and disadvantages of microservices?"
+- "Describe the concept of caching."
+
+Strong:
+- "Say a teammate proposes splitting our monolith into microservices next quarter. What would you want to know before agreeing?"
+- "A page that used to load in 300 milliseconds now takes three seconds after a release. Where do you start looking?"
+- "Which part of a project you've built would you redesign today, and why?"
+
+These examples only show the STYLE. Never reuse their scenarios or wording — write fresh situations specific to this role and stack.`;
+
+    const outputRules = `The questions are read aloud by a voice assistant, so do not use "/", "*", markdown, or other special characters, and do not number them or add commentary.
+Return ONLY a JSON array of strings, like:
+["Question 1", "Question 2", "Question 3"]`;
+
     const prompt = isResume
-      ? `Prepare ${amount} interview questions for a ${level} ${role} candidate, with the focus leaning towards ${type} questions.
+      ? `You are an experienced interviewer preparing ${amount} questions for a ${level} ${role} candidate, leaning towards ${type} questions.
 ${companyBlock}${typeInstructions}
 
-Base the questions on THIS candidate's actual resume below. Reference their real projects, technologies, and decisions. Probe the "why" behind their choices and the depth of their experience.
+Base the questions on THIS candidate's actual résumé below. Reference their real projects, technologies, and decisions by name, and probe the "why" behind their choices and the depth of their ownership. Spread the questions across different projects and skills rather than drilling one project repeatedly.
 
 ${buildResumeContext(resumeContext)}
 
-Good examples of resume-aware questions:
-- "Why did you choose <technology> over <alternative> in <their project>?"
-- "Walk me through the architecture of <their project>."
-- "What was the hardest trade-off you made while building <their project>?"
+Good résumé-aware questions sound like:
+- "In <their project> you went with <technology> — what else did you consider, and what tipped the decision?"
+- "Walk me through what actually happens when a user hits <feature> in <their project>."
+- "What broke in <their project> that you didn't see coming, and how did you find it?"
 
-The questions will be read aloud by a voice assistant, so do not use "/", "*", or other special characters.
-Return ONLY a JSON array of strings, like:
-["Question 1", "Question 2", "Question 3"]`
-      : `Prepare ${amount} interview questions for a job interview.
-The job role is ${role}.
-The job experience level is ${level}.
+${craftRules}
+
+${outputRules}`
+      : `You are an experienced interviewer preparing ${amount} questions for a ${level} ${role} interview, leaning towards ${type} questions.
 ${
   hasTechstack
-    ? `The tech stack used in the job is: ${techstack}. Ground technical questions in this stack.`
+    ? `The team's stack is: ${techstack}. Ground technical questions in it, but spread them across different parts of the stack.`
     : `No tech stack was specified. Infer the skills and tools a ${level} ${role} is actually expected to know, and ground technical questions in those. Do not ask the candidate which technologies they use — choose sensible ones for the role yourself.`
 }
-The focus between behavioural and technical questions should lean towards: ${type}.
 ${companyBlock}${typeInstructions}
 
-Quality requirements:
-- Every question must be distinct. Do not rephrase the same question twice.
-- Progress from foundational to more demanding across the set.
-- Each question must be answerable out loud in 2-4 minutes.
-- Be specific and concrete; avoid vague prompts like "tell me about your experience".
-- Do not number the questions or add commentary.
+${craftRules}
 
-The questions are going to be read by a voice assistant so do not use "/" or "*" or any other special characters which might break the voice assistant.
-Return ONLY a JSON array of strings, like:
-["Question 1", "Question 2", "Question 3"]`;
+${outputRules}`;
 
     const { text: questions } = await generateText({
       model: google("gemini-2.5-flash"),
