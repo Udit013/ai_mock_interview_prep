@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import React from "react";
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/actions/auth.action";
@@ -9,6 +10,8 @@ import ResumeUpload from "@/components/ResumeUpload";
 // suggestResumeImprovements's Gemini call (capped at 45 s in lib/ai/limits.ts).
 export const maxDuration = 60;
 
+export const metadata: Metadata = { title: "Résumé Coach" };
+
 const Page = async () => {
   const user = await getCurrentUser();
   if (!user) redirect("/sign-in");
@@ -18,7 +21,7 @@ const Page = async () => {
   if (!resume) {
     return (
       <section className="flex flex-col gap-4 items-start">
-        <h2>Résumé Coach</h2>
+        <h1 className="page-title">Résumé Coach</h1>
         <p className="text-light-400">
           Upload your résumé (PDF) to get AI-powered improvement suggestions —
           bullet rewrites, missing elements, and ATS keywords.
@@ -32,7 +35,7 @@ const Page = async () => {
     <section className="flex flex-col gap-6">
       <div className="flex items-start justify-between gap-4 max-sm:flex-col">
         <div className="flex flex-col gap-1">
-          <h2>Résumé Coach</h2>
+          <h1 className="page-title">Résumé Coach</h1>
           <p className="text-light-400">{resume.summary}</p>
         </div>
         <ResumeUpload label="Replace résumé" variant="secondary" />

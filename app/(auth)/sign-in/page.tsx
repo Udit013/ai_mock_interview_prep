@@ -1,7 +1,11 @@
+import type { Metadata } from "next";
 import AuthForm from "@/components/AuthForm";
 
-const Page = () => {
-    return <AuthForm type="sign-in" />
-}
+export const metadata: Metadata = {
+  title: "Sign in",
+  alternates: { canonical: "/sign-in" },
+};
 
-export default Page
+const Page = () => <AuthForm type="sign-in" />;
+
+export default Page;

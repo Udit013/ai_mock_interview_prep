@@ -1,4 +1,5 @@
 import React from "react";
+import type { Metadata } from "next";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import Image from "next/image";
@@ -11,6 +12,8 @@ import {
   getFeedbackByUserId,
 } from "@/lib/data/interview.data";
 import { computeProgress } from "@/lib/analytics/progress";
+
+export const metadata: Metadata = { title: "Dashboard" };
 
 const Page = async () => {
   const user = await getCurrentUser();
@@ -38,9 +41,13 @@ const Page = async () => {
     <>
       <section className="card-cta">
         <div className="flex flex-col gap-6 max-w-lg">
-          <h2>Get Interview-Ready with AI-Powered Practice &amp; Feedback</h2>
-          <p className="text-lg">
-            Practice on real interview questions &amp; get instant feedback
+          <span className="eyebrow">AI interview coach</span>
+          <h1 className="hero-title">
+            Get interview-ready with AI-powered practice &amp; feedback
+          </h1>
+          <p className="text-lg text-light-100/90">
+            Adaptive voice interviews, live coding rounds and detailed scoring
+            — practice on real questions and see exactly what to improve.
           </p>
           <Button asChild className="btn-primary max-sm:w-full">
             <Link href="/interview">Start an Interview</Link>
@@ -49,20 +56,21 @@ const Page = async () => {
 
         <Image
           src="/robot.png"
-          alt="PrepWise robot"
+          alt=""
           width={400}
           height={400}
-          className="max-sm:hidden"
+          priority
+          className="max-sm:hidden float-slow drop-shadow-[0_20px_60px_rgba(202,197,254,0.25)]"
         />
       </section>
 
       {progress.totalInterviews > 0 && (
-        <div className="mt-8">
+        <div>
           <ProgressOverview progress={progress} />
         </div>
       )}
 
-      <section className="flex flex-col gap-6 mt-8">
+      <section className="flex flex-col gap-6">
         <h2>Your Interviews</h2>
 
         <div className="interviews-section">
@@ -82,9 +90,9 @@ const Page = async () => {
               />
             ))
           ) : (
-            <p className="text-light-400">
+            <p className="empty-state">
               You haven&apos;t taken any interviews yet.{" "}
-              <Link href="/interview" className="text-user-primary font-bold">
+              <Link href="/interview" className="text-primary-200 font-bold underline-offset-4 hover:underline">
                 Start one now!
               </Link>
             </p>
@@ -92,7 +100,7 @@ const Page = async () => {
         </div>
       </section>
 
-      <section className="flex flex-col gap-6 mt-8">
+      <section className="flex flex-col gap-6">
         <h2>Take an Interview</h2>
 
         <div className="interviews-section">
@@ -110,7 +118,7 @@ const Page = async () => {
               />
             ))
           ) : (
-            <p className="text-light-400">
+            <p className="empty-state">
               No interviews available yet. Be the first to create one!
             </p>
           )}

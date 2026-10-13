@@ -10,38 +10,48 @@ const RootLayout = async ({ children }: { children: ReactNode }) => {
 
   return (
     <div className="root-layout">
-      <nav className="flex items-center justify-between">
-        <Link href="/" className="flex items-center gap-2">
-          <Image src="/logo.svg" alt="Logo" width={38} height={32} />
-          <h2 className="text-primary-100">PrepWise</h2>
-        </Link>
-
-        <div className="flex items-center gap-6">
+      <header className="site-header">
+        <nav
+          aria-label="Main"
+          className="flex items-center justify-between gap-4"
+        >
           <Link
-            href="/resume"
-            className="text-light-400 hover:text-primary-100 transition-colors text-sm"
+            href="/"
+            className="flex items-center gap-2 rounded-lg"
+            aria-label="PrepWise home"
           >
-            Résumé Coach
+            <Image src="/logo.svg" alt="" width={38} height={32} priority />
+            <span className="text-primary-100 text-2xl sm:text-3xl font-semibold">
+              PrepWise
+            </span>
           </Link>
 
-        <form
-          action={async () => {
-            "use server";
-            await signOut();
-            redirect("/sign-in");
-          }}
-        >
-          <button
-            type="submit"
-            className="text-light-400 hover:text-primary-100 transition-colors text-sm cursor-pointer"
-          >
-            Sign Out
-          </button>
-        </form>
-        </div>
-      </nav>
+          <div className="flex items-center gap-1 sm:gap-2">
+            <Link href="/interview" className="nav-link max-sm:hidden">
+              New Interview
+            </Link>
+            <Link href="/resume" className="nav-link">
+              Résumé Coach
+            </Link>
 
-      {children}
+            <form
+              action={async () => {
+                "use server";
+                await signOut();
+                redirect("/sign-in");
+              }}
+            >
+              <button type="submit" className="nav-link">
+                Sign Out
+              </button>
+            </form>
+          </div>
+        </nav>
+      </header>
+
+      <main id="main-content" className="flex flex-col gap-12">
+        {children}
+      </main>
     </div>
   );
 };

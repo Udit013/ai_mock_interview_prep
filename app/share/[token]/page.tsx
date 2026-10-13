@@ -20,15 +20,15 @@ const Page = async ({ params }: RouteParams) => {
 
   if (!shared) {
     return (
-      <div className="mx-auto max-w-xl px-6 py-24 text-center flex flex-col gap-4">
-        <h2>Report not found</h2>
+      <main id="main-content" className="mx-auto max-w-xl px-6 py-24 text-center flex flex-col gap-4">
+        <h1 className="page-title">Report not found</h1>
         <p className="text-light-400">
           This share link is invalid or has been revoked by its owner.
         </p>
         <Link href="/" className="text-primary-100 font-semibold">
           Go to PrepWise →
         </Link>
-      </div>
+      </main>
     );
   }
 
@@ -41,15 +41,15 @@ const Page = async ({ params }: RouteParams) => {
   };
 
   return (
-    <div className="mx-auto max-w-3xl px-6 py-12 flex flex-col gap-8">
+    <main id="main-content" className="mx-auto max-w-3xl px-6 py-12 flex flex-col gap-8">
       <div className="flex flex-col gap-2 text-center">
         <p className="text-xs uppercase tracking-widest text-light-400">
           Shared interview report · PrepWise
         </p>
-        <h2 className="capitalize">
+        <h1 className="page-title capitalize">
           {interview ? `${interview.role} Interview` : "Interview"} — Candidate
           Report
-        </h2>
+        </h1>
         <p>
           Overall score:{" "}
           <span className={cn("font-bold text-lg", scoreColor(feedback.totalScore))}>
@@ -120,7 +120,7 @@ const Page = async ({ params }: RouteParams) => {
         </Link>{" "}
         — AI interview practice with adaptive voice interviews.
       </p>
-    </div>
+    </main>
   );
 };
 

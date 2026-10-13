@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import React from "react";
 import { redirect } from "next/navigation";
 import Image from "next/image";
@@ -14,6 +15,8 @@ import {
 // Server actions run inside this page's function, so this bounds
 // createFeedback's Gemini call (capped at 45 s in lib/ai/limits.ts).
 export const maxDuration = 60;
+
+export const metadata: Metadata = { title: "Interview" };
 
 const Page = async ({ params }: RouteParams) => {
   const { id } = await params;
@@ -50,9 +53,9 @@ const Page = async ({ params }: RouteParams) => {
             className="rounded-full object-cover size-10"
           />
           <div className="flex flex-col">
-            <h3 className="capitalize leading-tight">
+            <h1 className="capitalize leading-tight text-2xl font-semibold">
               {interview.role} Interview
-            </h3>
+            </h1>
             <p className="text-xs text-light-400 capitalize">
               {interview.level} level
               {company ? ` · ${company.name} style` : ""}

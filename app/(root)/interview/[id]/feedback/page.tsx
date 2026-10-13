@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import React from "react";
 import { redirect } from "next/navigation";
 import Link from "next/link";
@@ -11,6 +12,8 @@ import {
 import { Button } from "@/components/ui/button";
 import ShareFeedbackButton from "@/components/ShareFeedbackButton";
 import { cn } from "@/lib/utils";
+
+export const metadata: Metadata = { title: "Feedback" };
 
 const Page = async ({ params }: RouteParams) => {
   const { id } = await params;
@@ -41,7 +44,7 @@ const Page = async ({ params }: RouteParams) => {
   return (
     <section className="section-feedback">
       <div className="flex flex-row justify-center">
-        <h2>Interview Feedback</h2>
+        <h1 className="page-title">Interview Feedback</h1>
       </div>
 
       <div className="flex flex-row justify-center">
@@ -66,7 +69,7 @@ const Page = async ({ params }: RouteParams) => {
       <hr className="border-dark-300" />
 
       <section>
-        <h3>Breakdown by Category</h3>
+        <h2 className="text-2xl">Breakdown by Category</h2>
         <div className="flex flex-col gap-4 mt-4">
           {feedback.categoryScores.map(({ name, score, comment }) => (
             <div key={name} className="flex flex-col gap-2">
@@ -98,7 +101,7 @@ const Page = async ({ params }: RouteParams) => {
       <hr className="border-dark-300" />
 
       <section className="flex flex-col gap-4">
-        <h3>Strengths</h3>
+        <h2 className="text-2xl">Strengths</h2>
         <ul className="flex flex-col gap-2">
           {feedback.strengths.map((strength, i) => (
             <li key={i} className="flex flex-row gap-2 items-start">
@@ -112,7 +115,7 @@ const Page = async ({ params }: RouteParams) => {
       <hr className="border-dark-300" />
 
       <section className="flex flex-col gap-4">
-        <h3>Areas for Improvement</h3>
+        <h2 className="text-2xl">Areas for Improvement</h2>
         <ul className="flex flex-col gap-2">
           {feedback.areasForImprovement.map((area, i) => (
             <li key={i} className="flex flex-row gap-2 items-start">
@@ -127,7 +130,7 @@ const Page = async ({ params }: RouteParams) => {
         <>
           <hr className="border-dark-300" />
           <section className="flex flex-col gap-4">
-            <h3>Speaking Analytics</h3>
+            <h2 className="text-2xl">Speaking Analytics</h2>
             <div className="flex flex-wrap gap-4">
               {[
                 {
@@ -190,7 +193,7 @@ const Page = async ({ params }: RouteParams) => {
         <>
           <hr className="border-dark-300" />
           <section className="flex flex-col gap-4">
-            <h3>STAR Method Completeness</h3>
+            <h2 className="text-2xl">STAR Method Completeness</h2>
             <div className="flex flex-wrap gap-3">
               {(
                 [
@@ -224,14 +227,14 @@ const Page = async ({ params }: RouteParams) => {
       <hr className="border-dark-300" />
 
       <section className="flex flex-col gap-4">
-        <h3>Final Assessment</h3>
+        <h2 className="text-2xl">Final Assessment</h2>
         <p className="text-light-400">{feedback.finalAssessment}</p>
       </section>
 
       <hr className="border-dark-300" />
 
       <section className="flex flex-col gap-3">
-        <h3>Share</h3>
+        <h2 className="text-2xl">Share</h2>
         <p className="text-light-400 text-sm">
           Create a read-only public link to this report (scores and feedback
           only — never your transcript or code). Revoke it anytime.

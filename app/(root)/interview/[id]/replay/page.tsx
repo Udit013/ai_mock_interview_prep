@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import React from "react";
 import { redirect } from "next/navigation";
 import Link from "next/link";
@@ -8,6 +9,8 @@ import {
 } from "@/lib/data/interview.data";
 import ReplayPlayer from "@/components/ReplayPlayer";
 import { Button } from "@/components/ui/button";
+
+export const metadata: Metadata = { title: "Replay" };
 
 const Page = async ({ params }: RouteParams) => {
   const { id } = await params;
@@ -28,7 +31,7 @@ const Page = async ({ params }: RouteParams) => {
   return (
     <section className="flex flex-col gap-6">
       <div className="flex items-center justify-between max-sm:flex-col max-sm:items-start max-sm:gap-2">
-        <h2 className="capitalize">{interview.role} Interview — Replay</h2>
+        <h1 className="page-title capitalize">{interview.role} Interview — Replay</h1>
         <Button asChild className="btn-secondary">
           <Link href={`/interview/${id}/feedback`}>← Back to Feedback</Link>
         </Button>
