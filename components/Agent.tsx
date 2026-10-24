@@ -119,7 +119,13 @@ const Agent = ({
 
   useEffect(() => {
     if (messages.length > 0) {
-      setLastMessage(messages[messages.length - 1].content);
+      // The coding opening carries the problem text for the saved transcript;
+      // it's already in the problem panel, so the bubble shows only the speech.
+      setLastMessage(
+        messages[messages.length - 1].content
+          .replace(/\n*\[Problem shown on screen\][\s\S]*$/, "")
+          .trim()
+      );
     }
   }, [messages]);
 
@@ -525,14 +531,26 @@ const Agent = ({
   const controlButton =
     callStatus !== CallStatus.ACTIVE ? (
       <button
+        type="button"
         className="relative btn-call"
         onClick={handleStart}
         disabled={
           callStatus === CallStatus.CONNECTING ||
           callStatus === CallStatus.FINISHED
         }
+        // Explicit name: the visible "Connecting" state is ". . .", which a
+        // screen reader would read as "dot dot dot".
+        aria-label={
+          callStatus === CallStatus.FINISHED
+            ? "Interview finished"
+            : callStatus === CallStatus.CONNECTING
+            ? "Connecting to the interviewer"
+            : "Start interview"
+        }
+        aria-busy={callStatus === CallStatus.CONNECTING}
       >
         <span
+          aria-hidden="true"
           className={cn(
             "absolute animate-ping rounded-full opacity-75",
             callStatus !== CallStatus.CONNECTING && "hidden"
@@ -547,7 +565,7 @@ const Agent = ({
         </span>
       </button>
     ) : (
-      <button className="btn-disconnect" onClick={handleEnd}>
+      <button type="button" className="btn-disconnect" onClick={handleEnd}>
         End Interview
       </button>
     );

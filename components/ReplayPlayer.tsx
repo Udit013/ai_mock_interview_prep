@@ -11,6 +11,29 @@ interface ReplayPlayerProps {
 }
 
 /** Milliseconds each message stays before auto-advancing during playback. */
+const PROBLEM_MARKER = /\n*\[Problem shown on screen\]:\s*/;
+
+/**
+ * Coding openings store the on-screen problem after a marker so feedback and
+ * replay keep the context. Show it as a labelled block rather than the raw tag.
+ */
+const ReplayContent = ({ content }: { content: string }) => {
+  const [spoken, problem] = content.split(PROBLEM_MARKER);
+  return (
+    <>
+      <p>{spoken}</p>
+      {problem && (
+        <div className="mt-3 rounded-lg border border-white/10 bg-dark-200/60 px-3 py-2">
+          <p className="text-xs font-semibold uppercase tracking-wide text-light-400 mb-1">
+            Problem shown on screen
+          </p>
+          <p className="whitespace-pre-wrap">{problem}</p>
+        </div>
+      )}
+    </>
+  );
+};
+
 const advanceDelay = (content: string) =>
   Math.min(Math.max(content.length * 35, 1800), 8000);
 
@@ -119,7 +142,7 @@ const ReplayPlayer = ({ transcript, userName, finalCode }: ReplayPlayerProps) =>
                 <p className="text-xs text-light-400 mb-1">
                   {isUser ? userName : "AI Interviewer"}
                 </p>
-                <p>{m.content}</p>
+                <ReplayContent content={m.content} />
               </div>
             </div>
           );
