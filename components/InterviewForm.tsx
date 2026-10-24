@@ -9,7 +9,6 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Form } from "@/components/ui/form";
 import FormField from "@/components/FormField";
-import { cn } from "@/lib/utils";
 import { COMPANY_MODES } from "@/constants/companies";
 
 const schema = z.object({
@@ -148,28 +147,17 @@ const InterviewForm = () => {
         </div>
 
         {/* Mode toggle */}
-        <div
-          role="tablist"
-          aria-label="Interview source"
-          className="flex gap-2 rounded-lg bg-dark-200 p-1"
-        >
+        <div role="group" aria-label="Interview source" className="segmented">
           {(["manual", "resume"] as Mode[]).map((m) => (
             <button
               key={m}
-              role="tab"
               type="button"
-              aria-selected={mode === m}
+              aria-pressed={mode === m}
               onClick={() => {
                 setMode(m);
                 // Résumé interviews are personal — default them to private.
                 setVisibility(m === "resume" ? "private" : "public");
               }}
-              className={cn(
-                "flex-1 rounded-md px-4 py-2 text-sm font-medium transition-colors",
-                mode === m
-                  ? "bg-primary-200 text-dark-100"
-                  : "text-light-400 hover:text-white"
-              )}
             >
               {m === "manual" ? "Manual setup" : "From résumé"}
             </button>
@@ -179,7 +167,7 @@ const InterviewForm = () => {
         {/* Résumé upload + preview */}
         {mode === "resume" && (
           <div className="flex flex-col gap-3">
-            <label className="label">Upload résumé (PDF)</label>
+            <span className="label">Upload résumé (PDF)</span>
             <input
               ref={fileInputRef}
               type="file"
@@ -357,7 +345,7 @@ const InterviewForm = () => {
               <div
                 role="group"
                 aria-labelledby="interview-visibility"
-                className="flex gap-2 rounded-lg bg-dark-200 p-1"
+                className="segmented"
               >
                 {(["public", "private"] as const).map((v) => (
                   <button
@@ -365,12 +353,7 @@ const InterviewForm = () => {
                     type="button"
                     aria-pressed={visibility === v}
                     onClick={() => setVisibility(v)}
-                    className={cn(
-                      "flex-1 rounded-md px-4 py-2 text-sm font-medium transition-colors capitalize",
-                      visibility === v
-                        ? "bg-primary-200 text-dark-100"
-                        : "text-light-400 hover:text-white"
-                    )}
+                    className="capitalize"
                   >
                     {v}
                   </button>

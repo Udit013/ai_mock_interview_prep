@@ -10,6 +10,16 @@ interface ShareFeedbackButtonProps {
   initialToken?: string;
 }
 
+/** Clipboard access can be blocked (permissions, non-secure origin). */
+const copyText = async (text: string): Promise<boolean> => {
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch {
+    return false;
+  }
+};
+
 const ShareFeedbackButton = ({
   feedbackId,
   initialToken,
@@ -30,10 +40,14 @@ const ShareFeedbackButton = ({
         return;
       }
       setToken(res.shareToken);
-      await navigator.clipboard
-        .writeText(`${window.location.origin}/share/${res.shareToken}`)
-        .catch(() => {});
-      toast.success("Share link created and copied to clipboard.");
+      const copied = await copyText(
+        `${window.location.origin}/share/${res.shareToken}`
+      );
+      toast.success(
+        copied
+          ? "Share link created and copied to clipboard."
+          : "Share link created. Copy it from the box below."
+      );
     } finally {
       setBusy(false);
     }
@@ -57,27 +71,39 @@ const ShareFeedbackButton = ({
   if (!token) {
     return (
       <Button onClick={enable} disabled={busy} className="btn-secondary">
-        🔗 {busy ? "Creating link…" : "Share this report"}
+        <span aria-hidden="true">🔗</span>{" "}
+        {busy ? "Creating link…" : "Share this report"}
       </Button>
     );
   }
 
   return (
-    <div className="flex flex-wrap items-center gap-3">
-      <Button
-        onClick={() => {
-          if (shareUrl) {
-            navigator.clipboard.writeText(shareUrl);
-            toast.success("Link copied.");
-          }
-        }}
-        className="btn-secondary"
-      >
-        📋 Copy share link
-      </Button>
-      <Button onClick={revoke} disabled={busy} className="btn-secondary">
-        {busy ? "Revoking…" : "Revoke link"}
-      </Button>
+    <div className="flex flex-col gap-3">
+      <label htmlFor="share-link" className="sr-only">
+        Public share link
+      </label>
+      <input
+        id="share-link"
+        readOnly
+        value={shareUrl ?? ""}
+        onFocus={(e) => e.currentTarget.select()}
+        className="w-full rounded-full border border-white/10 bg-dark-200 px-5 py-3 text-sm text-light-100"
+      />
+      <div className="flex flex-wrap items-center gap-3">
+        <Button
+          onClick={async () => {
+            if (!shareUrl) return;
+            if (await copyText(shareUrl)) toast.success("Link copied.");
+            else toast.error("Couldn't copy automatically — select the link above.");
+          }}
+          className="btn-secondary"
+        >
+          <span aria-hidden="true">📋</span> Copy share link
+        </Button>
+        <Button onClick={revoke} disabled={busy} className="btn-secondary">
+          {busy ? "Revoking…" : "Revoke link"}
+        </Button>
+      </div>
     </div>
   );
 };

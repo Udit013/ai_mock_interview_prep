@@ -462,8 +462,8 @@ section {
 .nav-link {
   display: inline-flex;
   align-items: center;
-  min-height: 2.5rem;
-  padding: 0 0.85rem;
+  min-height: 2.75rem;
+  padding: 0 0.7rem;
   white-space: nowrap;
   border-radius: 9999px;
   font-size: 0.875rem;
@@ -478,6 +478,11 @@ section {
   background: rgba(255, 255, 255, 0.06);
 }
 
+@media (min-width: 1024px) {
+  .nav-link {
+    padding: 0 0.85rem;
+  }
+}
 @media (max-width: 639px) {
   .nav-link {
     padding: 0 0.55rem;
@@ -525,6 +530,66 @@ section {
   text-align: center;
 }
 
+/* Current page in the header, and loading skeletons. */
+.nav-link-active {
+  opacity: 1;
+  color: white;
+  background: rgba(202, 197, 254, 0.14);
+  box-shadow: inset 0 0 0 1px rgba(202, 197, 254, 0.25);
+}
+@keyframes shimmer {
+  to {
+    background-position: -200% 0;
+  }
+}
+.skeleton {
+  background: linear-gradient(
+    100deg,
+    rgba(255, 255, 255, 0.04) 30%,
+    rgba(255, 255, 255, 0.09) 50%,
+    rgba(255, 255, 255, 0.04) 70%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.6s linear infinite;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+@keyframes ringFill {
+  from {
+    stroke-dashoffset: var(--ring-circumference);
+  }
+}
+.ring-fill {
+  animation: ringFill 1.1s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+/* Pill toggles (mode / visibility): comfortable 44px touch targets. */
+.segmented {
+  display: flex;
+  gap: 0.25rem;
+  padding: 0.25rem;
+  border-radius: 9999px;
+  background: var(--color-dark-200);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+.segmented > button {
+  flex: 1;
+  min-height: 2.75rem;
+  padding: 0 1rem;
+  border-radius: 9999px;
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+  color: var(--color-light-400);
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+.segmented > button:hover {
+  color: white;
+}
+.segmented > button[aria-pressed="true"] {
+  background: var(--color-primary-200);
+  color: var(--color-dark-100);
+  box-shadow: 0 4px 16px -6px rgba(202, 197, 254, 0.8);
+}
+
 @keyframes floatSlow {
   0%, 100% { transform: translateY(0); }
   50% { transform: translateY(-10px); }
@@ -557,7 +622,9 @@ section {
   }
   .float-slow,
   .animate-speak,
-  .animate-ping {
+  .animate-ping,
+  .skeleton,
+  .ring-fill {
     animation: none !important;
   }
   .btn-call,

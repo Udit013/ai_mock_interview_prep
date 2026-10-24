@@ -1,7 +1,7 @@
 import React from 'react'
-import {FormControl, FormItem, FormLabel, FormMessage} from "@/components/ui/form";
+import {FormControl, FormField as UIFormField, FormItem, FormLabel, FormMessage} from "@/components/ui/form";
 import {Input} from "@/components/ui/input";
-import {Controller, FieldValues, Path, Control} from "react-hook-form";
+import {FieldValues, Path, Control} from "react-hook-form";
 
 interface FormFieldProps<T extends FieldValues> {
     control: Control<T>;
@@ -13,7 +13,7 @@ interface FormFieldProps<T extends FieldValues> {
 }
 
 const FormField = <T extends FieldValues>({ control, name, label, placeholder, type ="text", autoComplete }: FormFieldProps<T>) => (
-    <Controller
+    <UIFormField
         control={control}
         name={name}
         render={({ field }) => (

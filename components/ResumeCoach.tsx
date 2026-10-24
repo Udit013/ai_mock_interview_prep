@@ -27,9 +27,27 @@ const ResumeCoach = () => {
   return (
     <div className="flex flex-col gap-6">
       {!result && (
-        <Button onClick={run} disabled={loading} className="btn-primary w-fit">
+        <Button
+          onClick={run}
+          disabled={loading}
+          aria-busy={loading}
+          className="btn-primary w-fit"
+        >
           {loading ? "Analyzing your résumé…" : "Get AI improvement suggestions"}
         </Button>
+      )}
+
+      {/* Polite live region: announces progress and completion to screen readers. */}
+      <p role="status" aria-live="polite" className="sr-only">
+        {loading ? "Analyzing your résumé…" : result ? "Suggestions ready." : ""}
+      </p>
+
+      {loading && !result && (
+        <div aria-hidden="true" className="flex flex-col gap-3">
+          {[0, 1, 2].map((i) => (
+            <div key={i} className="skeleton h-24 rounded-xl" />
+          ))}
+        </div>
       )}
 
       {result && (

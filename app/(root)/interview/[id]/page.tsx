@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import React from "react";
 import { redirect } from "next/navigation";
 import Image from "next/image";
+import Link from "next/link";
 import Agent from "@/components/Agent";
 import CodingInterview from "@/components/CodingInterview";
 import DisplayTechIcons from "@/components/DisplayTechIcons";
@@ -43,6 +44,13 @@ const Page = async ({ params }: RouteParams) => {
 
   return (
     <>
+      <Link
+        href="/"
+        className="w-fit text-sm text-light-400 transition-colors hover:text-white"
+      >
+        <span aria-hidden="true">←</span> Dashboard
+      </Link>
+
       <div className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-dark-300 bg-dark-200/40 px-5 py-4">
         <div className="flex flex-wrap items-center gap-4">
           <Image

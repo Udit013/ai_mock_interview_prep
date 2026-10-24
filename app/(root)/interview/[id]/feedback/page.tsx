@@ -11,6 +11,7 @@ import {
 } from "@/lib/data/interview.data";
 import { Button } from "@/components/ui/button";
 import ShareFeedbackButton from "@/components/ShareFeedbackButton";
+import ScoreRing from "@/components/ScoreRing";
 import { cn } from "@/lib/utils";
 
 export const metadata: Metadata = { title: "Feedback" };
@@ -43,28 +44,26 @@ const Page = async ({ params }: RouteParams) => {
 
   return (
     <section className="section-feedback">
-      <div className="flex flex-row justify-center">
-        <h1 className="page-title">Interview Feedback</h1>
-      </div>
+      <Link
+        href="/"
+        className="w-fit text-sm text-light-400 transition-colors hover:text-white"
+      >
+        <span aria-hidden="true">←</span> Dashboard
+      </Link>
 
-      <div className="flex flex-row justify-center">
-        <div className="flex flex-row gap-5 items-center">
-          <div className="flex flex-row gap-2 items-center">
-            <Image src="/star.svg" alt="star" width={22} height={22} />
-            <p>
-              Overall Score:{" "}
-              <span className={cn("font-bold text-lg", scoreColor(feedback.totalScore))}>
-                {feedback.totalScore}/100
-              </span>
-            </p>
-          </div>
-
-          <div className="flex flex-row gap-2 items-center">
-            <Image src="/calendar.svg" alt="calendar" width={22} height={22} />
-            <p>{formattedDate}</p>
-          </div>
+      <header className="flex items-center gap-6 rounded-3xl border border-primary-200/10 blue-gradient-dark p-6 shadow-[0_30px_80px_-50px_rgba(202,197,254,0.5)] max-sm:flex-col max-sm:text-center sm:p-8">
+        <ScoreRing score={feedback.totalScore} />
+        <div className="flex flex-col gap-2 max-sm:items-center">
+          <p className="eyebrow">Interview feedback</p>
+          <h1 className="page-title capitalize">
+            {interview.role} interview
+          </h1>
+          <p className="flex items-center gap-2 text-sm text-light-400">
+            <Image src="/calendar.svg" alt="" width={18} height={18} />
+            {formattedDate}
+          </p>
         </div>
-      </div>
+      </header>
 
       <hr className="border-dark-300" />
 
@@ -255,7 +254,7 @@ const Page = async ({ params }: RouteParams) => {
       <div className="buttons">
         <Button asChild className="btn-secondary flex-1">
           <Link href="/">
-            <Image src="/logo.svg" alt="home" width={20} height={20} />
+            <Image src="/logo.svg" alt="" width={20} height={20} />
             Back to Dashboard
           </Link>
         </Button>

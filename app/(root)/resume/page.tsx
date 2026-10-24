@@ -20,13 +20,39 @@ const Page = async () => {
 
   if (!resume) {
     return (
-      <section className="flex flex-col gap-4 items-start">
-        <h1 className="page-title">Résumé Coach</h1>
-        <p className="text-light-400">
-          Upload your résumé (PDF) to get AI-powered improvement suggestions —
-          bullet rewrites, missing elements, and ATS keywords.
-        </p>
-        <ResumeUpload label="Upload résumé (PDF)" />
+      <section className="flex flex-col gap-8">
+        <div className="flex flex-col gap-2">
+          <h1 className="page-title">Résumé Coach</h1>
+          <p className="text-light-400 max-w-2xl">
+            Upload your résumé once and use it two ways: get blunt, specific
+            improvement suggestions, and practise interviews built around your
+            real projects.
+          </p>
+        </div>
+
+        <div className="card-border w-full max-w-2xl">
+          <div className="card flex flex-col items-start gap-6 p-8 max-sm:p-6">
+            <ul className="flex list-none flex-col gap-3 p-0">
+              {[
+                ["Bullet rewrites", "stronger verbs and measurable outcomes"],
+                ["Gap check", "what a recruiter would flag as missing"],
+                ["ATS keywords", "only ones your experience supports"],
+              ].map(([title, text]) => (
+                <li key={title} className="flex items-start gap-3">
+                  <span aria-hidden="true" className="mt-0.5 text-success-100">✓</span>
+                  <p>
+                    <strong className="text-white">{title}</strong> — {text}
+                  </p>
+                </li>
+              ))}
+            </ul>
+            <ResumeUpload label="Upload résumé (PDF)" />
+            <p className="text-xs text-light-400">
+              PDF only, text-based (scans and images can&apos;t be read). Your
+              résumé stays private to your account.
+            </p>
+          </div>
+        </div>
       </section>
     );
   }
@@ -41,13 +67,19 @@ const Page = async () => {
         <ResumeUpload label="Replace résumé" variant="secondary" />
       </div>
 
-      <div className="flex flex-wrap gap-2">
+      <ul
+        aria-label="Skills detected in your résumé"
+        className="flex list-none flex-wrap gap-2 p-0"
+      >
         {resume.skills.slice(0, 14).map((s) => (
-          <span key={s} className="rounded-full bg-dark-300 px-3 py-1 text-xs">
+          <li
+            key={s}
+            className="rounded-full border border-white/5 bg-dark-300 px-3 py-1 text-xs text-light-100"
+          >
             {s}
-          </span>
+          </li>
         ))}
-      </div>
+      </ul>
 
       {resume.projects.length > 0 && (
         <div className="flex flex-col gap-2">

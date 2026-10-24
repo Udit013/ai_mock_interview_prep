@@ -90,12 +90,12 @@ const Page = async () => {
               />
             ))
           ) : (
-            <p className="empty-state">
-              You haven&apos;t taken any interviews yet.{" "}
-              <Link href="/interview" className="text-primary-200 font-bold underline-offset-4 hover:underline">
-                Start one now!
-              </Link>
-            </p>
+            <div className="empty-state flex flex-col items-center gap-4">
+              <p>You haven&apos;t taken any interviews yet.</p>
+              <Button asChild className="btn-primary">
+                <Link href="/interview">Create your first interview</Link>
+              </Button>
+            </div>
           )}
         </div>
       </section>
