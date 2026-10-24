@@ -2,6 +2,8 @@ import type { NextConfig } from "next";
 import path from "path";
 
 const nextConfig: NextConfig = {
+  // Don't advertise the framework in an `x-powered-by` response header.
+  poweredByHeader: false,
   webpack(config) {
     // Shim buffer-equal-constant-time for Node 22+ (SlowBuffer was removed)
     config.resolve.alias["buffer-equal-constant-time"] = path.join(

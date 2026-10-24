@@ -1,7 +1,6 @@
 // Import the functions you need from the SDKs you need
 import { initializeApp, getApp, getApps } from "firebase/app";
 import { getAuth } from "firebase/auth";
-import { getFirestore } from "firebase/firestore";
 
 const firebaseConfig = {
   apiKey: "AIzaSyB6F7PqTUjFIDZzDeCNYC2U3kRFfZfDCkQ",
@@ -16,5 +15,7 @@ const firebaseConfig = {
 // Initialize Firebase
 const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
 
+// Only Firebase Auth runs in the browser — all Firestore access goes through
+// the Admin SDK on the server. Importing the Firestore client here used to pull
+// its whole SDK into the sign-in bundle for nothing.
 export const auth = getAuth(app);
-export const db = getFirestore(app);
