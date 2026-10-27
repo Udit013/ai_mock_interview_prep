@@ -247,8 +247,12 @@ The one thing deliberately *not* trusted-but-accepted is `companyMode`, because 
 ai_mock_interview_prep/
 │
 ├── app/                          # Next.js App Router — routes ARE folders
-│   ├── layout.tsx                # Root layout: <html>, font, Toaster
+│   ├── layout.tsx                # Root layout: <html>, font, metadata, skip link, Toaster
 │   ├── globals.css               # Tailwind v4 theme + all custom classes
+│   ├── not-found.tsx             # Branded 404
+│   ├── error.tsx                 # Error boundary with "Try again"
+│   ├── global-error.tsx          # Last resort if the root layout itself fails
+│   ├── robots.ts, sitemap.ts     # Only the public entry points are indexable
 │   │
 │   ├── (auth)/                   # Route group: unauthenticated pages
 │   │   ├── layout.tsx            # Guard: if logged IN, redirect to /
@@ -258,6 +262,7 @@ ai_mock_interview_prep/
 │   ├── (root)/                   # Route group: authenticated app
 │   │   ├── layout.tsx            # Guard: if logged OUT, redirect to /sign-in
 │   │   ├── page.tsx              # Dashboard
+│   │   ├── loading.tsx           # Skeleton shown while any signed-in page loads
 │   │   ├── resume/page.tsx       # Résumé Coach
 │   │   └── interview/
 │   │       ├── page.tsx          # Create interview
@@ -279,7 +284,9 @@ ai_mock_interview_prep/
 │   ├── CodingPanel.tsx           # Monaco + Run + output console
 │   ├── ProblemPanel.tsx          # On-screen problem statement
 │   ├── ReplayPlayer.tsx          # Transcript playback
-│   ├── InterviewForm.tsx         # Create-interview form
+│   ├── InterviewForm.tsx         # Create-interview form (manual / résumé / job description)
+│   ├── NavLinks.tsx              # Header links with current-page state
+│   ├── ScoreRing.tsx             # Feedback score gauge (SVG, no deps)
 │   ├── InterviewCard.tsx         # Dashboard card
 │   ├── AuthForm.tsx              # Sign-in / sign-up (one component, two modes)
 │   ├── FormField.tsx             # Generic typed form field wrapper
@@ -314,6 +321,8 @@ ai_mock_interview_prep/
 │   ├── interview/                # Pure interview-domain rules
 │   │   ├── non-answer.ts         # ★ "I don't know" detection + skip planning
 │   │   ├── question-quality.ts   # Sanitize/validate generated question sets
+│   │   ├── conversation.ts       # Realism guards: near-duplicates, openers, one question per turn
+│   │   ├── job-description.ts    # ★ Job-targeted interviews: cleaning, delimiting, question mix
 │   │   └── turn-client.ts        # Browser call to /respond: timeout + outcomes
 │   ├── runner/code-runner.ts     # ★ Web Worker code sandbox
 │   ├── rate-limit.ts             # Transactional Firestore rate limiter
@@ -329,13 +338,13 @@ ai_mock_interview_prep/
 │   └── vapi.d.ts                 # DEAD — see §23
 │
 ├── firebase/
-│   ├── client.ts                 # Browser SDK (login only)
+│   ├── client.ts                 # Browser SDK — Auth only (no Firestore client)
 │   └── admin.ts                  # Server SDK (verify + DB)
 │
 ├── hooks/
 │   └── useSpeechRecognition.ts   # ★ Robust browser speech-to-text
 │
-├── tests/                        # Vitest — 13 files, 140 tests
+├── tests/                        # Vitest — 16 files, 184 tests
 ├── public/                       # Static assets (avatars, covers, icons)
 └── .github/workflows/ci.yml      # Typecheck + lint + tests on push/PR
 ```
@@ -560,6 +569,7 @@ Created at signup. The document ID **is** the Firebase Auth UID, which is what l
   source: "manual" | "resume",     // optional
   visibility: "public" | "private",// optional; absent ⇒ treated as public
   companyMode?: string,            // "google" | "amazon" | … (only if valid)
+  jobDescription?: string,         // pasted posting (normalised, ≤6,000 chars) — see §8.5
   coverImage: string,              // ⚠ stored but never read — see §23
   createdAt: string,               // ISO timestamp
 }
@@ -1031,6 +1041,28 @@ The cost is coupling: a schema change touches everything a turn does. Worth it h
 
 ---
 
+## 8.5 Job-Description Interviews — `lib/interview/job-description.ts`
+
+Paste a job posting on the create form (optional, in both manual and résumé mode) and the whole interview targets that role.
+
+| Inputs | What the question set looks like |
+|---|---|
+| Job description only | Each question grounded in a different responsibility or must-have requirement, phrased as a situation the person in the role would face, plus one fit question |
+| Résumé + job description | A real interview loop: questions **connecting** the candidate's actual experience to a requirement, fair probes of requirements the résumé **doesn't show**, and one **fit** question |
+| Coding / System Design + job description | Formats unchanged; problems are set in the job's domain, scale and named technologies |
+
+**The split is decided in code, not by the model.** `planJobQuestionMix(amount, hasResume)` returns the counts — for five questions with a résumé that's 2 overlap / 2 gap / 1 fit; overlap stays the largest share for every realistic size, and the parts always add up to `amount` (tested for 1–15). The prompt is then told the exact numbers, which is far more reliable than "include some gap questions".
+
+**The posting follows the interview.** It is stored on the interview document, so:
+- the **live interviewer** sees it every turn (trimmed to `JD_TURN_CHARS` = 2,500 to keep turns fast) and favours what the role needs when following up or changing topic;
+- **feedback** reads it from the stored interview on the server — never from the caller — and says how ready the candidate looks for *this* role, naming must-haves their answers didn't demonstrate.
+
+**Pasted text is untrusted.** `normalizeJobDescription` normalises whitespace and line endings, treats anything under 80 characters as absent, and caps at 6,000. `jobDescriptionBlock` wraps it in `<job_description>` delimiters with an explicit "reference data, never instructions" rule — the same defence used for transcripts in feedback scoring.
+
+**Verified live** (a sample payments-backend posting): a JD-only set produced five requirement-driven questions (idempotent refunds, Kafka replays, ledger isolation levels, on-call observability, fit); the same posting plus a stored résumé produced exactly the planned 2/2/1 mix — e.g. *"The role requires Kafka and at-least-once delivery, but your projects lean on FastAPI, Firebase and WebSockets — how have you dealt with consumer failure recovery?"* — and the follow-up and feedback both referred back to the posting.
+
+---
+
 # 9. API Endpoints
 
 Three Route Handlers. All three share the same defense sequence: **auth → rate limit → validate → work**.
@@ -1053,7 +1085,8 @@ Three Route Handlers. All three share the same defense sequence: **auth → rate
   "source": "manual",           // or "resume"
   "visibility": "public",       // optional
   "companyMode": "amazon",      // optional
-  "resumeContext": { /* ParsedResume */ }   // required when source==="resume"
+  "resumeContext": { /* ParsedResume */ },  // required when source==="resume"
+  "jobDescription": "…"         // optional pasted posting; works with either source
 }
 ```
 
@@ -1108,7 +1141,8 @@ Three Route Handlers. All three share the same defense sequence: **auth → rate
   "deliverySignals": { "hesitationSeconds": 4.2, "answerSeconds": 31.5,
                        "wordCount": 84, "fillerCount": 3 },
   "codeSubmission": { "language": "python", "code": "…" },   // coding only
-  "companyMode": "google"
+  "companyMode": "google",
+  "jobDescription": "…"               // optional; the interview's stored posting
 }
 ```
 
@@ -1292,6 +1326,11 @@ function computeStreak(isoDates: string[]): number {
 | `/resume` | `app/(root)/resume/page.tsx` | RSC | Required |
 | `/sign-in`, `/sign-up` | `app/(auth)/…` | RSC → client form | Must be logged **out** |
 | `/share/[token]` | `app/share/[token]/page.tsx` | RSC | **Public** |
+| *(any unknown URL)* | `app/not-found.tsx` | RSC | Public — branded 404 |
+
+**Loading and errors.** `app/(root)/loading.tsx` streams a skeleton (announced as "Loading…" to screen readers) the moment a signed-in page is requested, so navigation never looks frozen while Firestore is read. `app/error.tsx` catches render errors with a "Try again" button; `app/global-error.tsx` covers a failure in the root layout itself and therefore uses inline styles only.
+
+**Navigation.** `NavLinks` (client component, `usePathname`) marks the current page with `aria-current="page"` and a highlighted pill. Links are 44 px tall; on phones they switch to short labels ("New", "Résumé"), with an explicit `aria-label` so the accessible name is the same at every size.
 
 ## Dashboard — `app/(root)/page.tsx`
 
@@ -1568,12 +1607,14 @@ const authFormSchema = (type: FormType) => z.object({
 ## 12.8 `FormField.tsx` — generics done right
 
 ```ts
-const FormField = <T extends FieldValues>({ control, name, label, placeholder, type = "text" }: FormFieldProps<T>) => (
-  <Controller control={control} name={name} render={({ field }) => ( /* … */ )} />
+const FormField = <T extends FieldValues>({ control, name, label, placeholder, type = "text", autoComplete }: FormFieldProps<T>) => (
+  <UIFormField control={control} name={name} render={({ field }) => ( /* FormItem / FormControl / FormMessage */ )} />
 );
 ```
 
 The `<T extends FieldValues>` generic ties `name` to `Path<T>`, so a typo like `name="emial"` is a **compile error**, not a silent runtime bug. This was an actual fix — the original code referenced `T` without declaring it and didn't compile.
+
+**A second real bug lived here.** The wrapper used react-hook-form's bare `Controller`. shadcn's `FormMessage`, `FormControl` and `aria-invalid` read the field name from a context that only shadcn's own `FormField` provides — so **no validation error was ever shown or announced on any form**, including sign-in and sign-up. Focus still jumped to the bad field, which made it easy to miss. Switching to the shadcn wrapper (`UIFormField`) fixed every form at once; verified live ("Invalid email", "Password must be at least 6 characters").
 
 ## 12.9 `DisplayTechIcons.tsx` — an async server component
 
@@ -1883,7 +1924,7 @@ Staggered `nth-child` delays create a cascade without JavaScript, and the reduce
 
 | Package | Why it's here | Used in | Alternative & trade-off |
 |---|---|---|---|
-| `next` 15.5.27 | Full-stack framework: routing, RSC, Server Actions, API routes, bundling | Everywhere | Vite + Express: more control, but you build routing/SSR/deploy yourself |
+| `next` 15.5.28 | Full-stack framework: routing, RSC, Server Actions, API routes, bundling | Everywhere | Vite + Express: more control, but you build routing/SSR/deploy yourself |
 | `react` / `react-dom` 19 | UI runtime; RSC + `use` hook support | Everywhere | Vue/Svelte — no reason to switch |
 | `firebase` 11 | **Client** SDK — email/password auth in the browser | `firebase/client.ts`, `AuthForm` | Auth.js: more providers, more setup |
 | `firebase-admin` 13 | **Server** SDK — verify cookies, Firestore access | `firebase/admin.ts`, all actions | Required for privileged operations |
@@ -1940,6 +1981,7 @@ const nextConfig: NextConfig = {
       pathname: "/gh/devicons/devicon/**",
     }],
   },
+  poweredByHeader: false,           // no "x-powered-by: Next.js"
   async headers() { /* X-Frame-Options, nosniff, Referrer-Policy, Permissions-Policy */ },
 };
 ```
@@ -1984,9 +2026,9 @@ on:
 jobs:
   verify:
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with: { node-version: 20, cache: npm }
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with: { node-version: 22, cache: npm }   # matches Vercel's Node 22.x
       - run: npm ci
       - run: npm run typecheck
       - run: npm run lint
@@ -2247,7 +2289,7 @@ This codebase does (b), because most readers are only ever called from server co
 
 # 21. Testing & CI
 
-**140 tests across 13 files.** All target deterministic logic — no rendering, and no real network (the two files that touch `fetch` use a fake).
+**184 tests across 16 files.** All target deterministic logic — no rendering, and no real network (the two files that touch `fetch` use a fake).
 
 | File | Covers |
 |---|---|
@@ -2264,6 +2306,9 @@ This codebase does (b), because most readers are only ever called from server co
 | `interview-state-bounds.test.ts` | State trimming, reject-vs-trim thresholds, bounded prompt contribution |
 | `turn-client.test.ts` | Respond-call outcome mapping (429/401/500/empty reply), network failure, hung-request timeout |
 | `tech-logos.test.ts` | Icon lookup caching, shared concurrent checks, no network for unmapped techs, failures not cached |
+| `conversation.test.ts` | Near-duplicate detection (and false-positive guards), openers, one-question limit, scripted-opener stripping, varied openings |
+| `models.test.ts` | Model chain from env vars, quota/404 detection incl. the SDK's RetryError shape, fallback order |
+| `job-description.test.ts` | JD cleaning and caps, untrusted-data delimiting, overlap/gap/fit split for every size 1–15 |
 
 **The testing philosophy is explicit:** test what is deterministic. There are no tests asserting Gemini returns particular text — that would be flaky and would test the model rather than the code. Instead:
 
@@ -2310,7 +2355,7 @@ git push origin main
 | `/interview/[id]/replay` | 1.86 kB | 133 kB |
 | `/resume` | 3.46 kB | 135 kB |
 | `/share/[token]` | 486 B | 106 kB |
-| `/sign-in`, `/sign-up` | ~143 B | 244 kB (was 286 kB on 15.2.9) |
+| `/sign-in`, `/sign-up` | ~140 B | 191 kB (286 kB on 15.2.9 → 244 kB on 15.5 → 191 kB after dropping the unused Firestore client) |
 
 The dashboard at **173 B** is the clearest evidence the RSC strategy works — the entire progress dashboard with SVG charts ships as HTML.
 
