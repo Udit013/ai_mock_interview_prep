@@ -16,6 +16,7 @@ interface CodingInterviewProps {
   role: string;
   level: string;
   companyMode?: string;
+  jobDescription?: string;
 }
 
 /**
@@ -69,6 +70,7 @@ const CodingInterview = (props: CodingInterviewProps) => {
           level={props.level}
           interviewType="Coding"
           companyMode={props.companyMode}
+          jobDescription={props.jobDescription}
           getCodeContext={getCodeContext}
           compact
           onActiveChange={setInterviewActive}

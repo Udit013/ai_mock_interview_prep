@@ -12,6 +12,12 @@ import {
   sanitizeQuestions,
   meetsMinimumCount,
 } from "@/lib/interview/question-quality";
+import {
+  MAX_JD_CHARS,
+  jobDescriptionBlock,
+  jobQuestionInstructions,
+  normalizeJobDescription,
+} from "@/lib/interview/job-description";
 
 // Gemini calls are capped at 45 s (lib/ai/limits.ts); leave headroom for auth
 // and Firestore. Must be a literal — Next reads it statically.
@@ -41,6 +47,9 @@ const generateBodySchema = z.object({
   resumeContext: resumeSchema.optional(),
   visibility: z.enum(["public", "private"]).optional(),
   companyMode: z.string().max(30).optional(),
+  // Optional pasted job posting. Bounded generously (raw pastes carry extra
+  // whitespace); normalised and capped before use.
+  jobDescription: z.string().max(MAX_JD_CHARS * 2).optional(),
 });
 
 /**
@@ -121,6 +130,7 @@ export async function POST(request: Request) {
       resumeContext,
       visibility,
       companyMode,
+      jobDescription: rawJobDescription,
     } = parsedBody.data;
 
     // Only persist known company modes; unknown ids degrade to generic.
@@ -129,6 +139,16 @@ export async function POST(request: Request) {
     const isResume = source === "resume" && resumeContext;
     // Tech stack is optional — when absent the model infers what the role needs.
     const hasTechstack = Boolean(techstack && techstack.trim());
+    // A job description targets the whole set at one posting; with a résumé it
+    // becomes a real-interview mix of overlap, gap, and fit questions.
+    const jobDescription = normalizeJobDescription(rawJobDescription);
+    const jobBlock = jobDescription
+      ? `\n${jobDescriptionBlock(jobDescription)}\n\n${jobQuestionInstructions({
+          type,
+          amount,
+          hasResume: Boolean(isResume),
+        })}\n`
+      : "";
 
     const typeInstructions =
       type === "Coding"
@@ -171,7 +191,7 @@ ${companyBlock}${typeInstructions}
 Base the questions on THIS candidate's actual résumé below. Reference their real projects, technologies, and decisions by name, and probe the "why" behind their choices and the depth of their ownership. Spread the questions across different projects and skills rather than drilling one project repeatedly.
 
 ${buildResumeContext(resumeContext)}
-
+${jobBlock}
 Good résumé-aware questions sound like:
 - "In <their project> you went with <technology> — what else did you consider, and what tipped the decision?"
 - "Walk me through what actually happens when a user hits <feature> in <their project>."
@@ -184,10 +204,12 @@ ${outputRules}`
 ${
   hasTechstack
     ? `The team's stack is: ${techstack}. Ground technical questions in it, but spread them across different parts of the stack.`
+    : jobDescription
+    ? `No tech stack was specified separately — take the skills and tools from the job description.`
     : `No tech stack was specified. Infer the skills and tools a ${level} ${role} is actually expected to know, and ground technical questions in those. Do not ask the candidate which technologies they use — choose sensible ones for the role yourself.`
 }
 ${companyBlock}${typeInstructions}
-
+${jobBlock}
 ${craftRules}
 
 ${outputRules}`;
@@ -255,6 +277,8 @@ ${outputRules}`;
       source: source ?? "manual",
       visibility: resolvedVisibility,
       ...(company ? { companyMode: company.id } : {}),
+      // Kept so the live interviewer and the feedback stay anchored to the job.
+      ...(jobDescription ? { jobDescription } : {}),
       coverImage: getRandomInterviewCover(),
       createdAt: new Date().toISOString(),
     };

@@ -10,6 +10,7 @@ import {
   recentOpeners,
   stripScriptedOpener,
 } from "@/lib/interview/conversation";
+import { JD_TURN_CHARS, jobDescriptionBlock } from "@/lib/interview/job-description";
 
 /** Live model of how the interview is going, carried across turns. */
 export const interviewStateSchema = z.object({
@@ -176,6 +177,8 @@ interface RunAdaptiveTurnArgs {
   deliverySignals?: DeliverySignals;
   codeSubmission?: CodeSubmission;
   companyBlock?: string;
+  /** Job posting the interview targets, already normalised. */
+  jobDescription?: string;
   /** Seed question being discussed before this turn. */
   activeQuestionIndex?: number;
   /** Turns already spent on that seed question (follow-ups included). */
@@ -226,6 +229,7 @@ export async function runAdaptiveTurn(
     deliverySignals,
     codeSubmission,
     companyBlock,
+    jobDescription,
     activeQuestionIndex = 0,
     topicTurns = 0,
   } = args;
@@ -274,6 +278,10 @@ export async function runAdaptiveTurn(
 
   const prompt = `You are an experienced ${role} interviewer running a live ${level}-level ${type} interview over voice. You have interviewed hundreds of candidates: you are warm but rigorous, curious about how they think, and you talk like a person, not a script. ${typeGuidance}
 ${companyBlock ?? ""}${
+    jobDescription
+      ? `\n${jobDescriptionBlock(jobDescription, JD_TURN_CHARS)}\nInterview for THIS job: when you follow up or change topic, favour what the role actually requires, and connect the candidate's answers to its responsibilities.\n`
+      : ""
+  }${
     deliveryNote
       ? `\nDelivery observation for the candidate's last answer: ${deliveryNote}.
 React to delivery like a considerate human would: if they hesitated a long time or sound unsure, briefly put them at ease before probing; if they were composed and quick, you can push harder. Fold delivery into estimatedConfidence. Never recite these metrics.\n`

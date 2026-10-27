@@ -79,6 +79,14 @@ const Page = async ({ params }: RouteParams) => {
               {company.name}
             </span>
           )}
+          {interview.jobDescription && (
+            <span
+              title="Questions, follow-ups and feedback target the job description you pasted"
+              className="rounded-lg border border-success-100/30 bg-success-100/10 px-3 py-1.5 text-xs text-success-100"
+            >
+              Job-targeted
+            </span>
+          )}
           <span className="rounded-lg bg-dark-200 px-4 py-2 text-sm capitalize">
             {interview.type}
           </span>
@@ -95,6 +103,7 @@ const Page = async ({ params }: RouteParams) => {
           role={interview.role}
           level={interview.level}
           companyMode={interview.companyMode}
+          jobDescription={interview.jobDescription}
         />
       ) : (
         <Agent
@@ -108,6 +117,7 @@ const Page = async ({ params }: RouteParams) => {
           level={interview.level}
           interviewType={interview.type}
           companyMode={interview.companyMode}
+          jobDescription={interview.jobDescription}
         />
       )}
     </>

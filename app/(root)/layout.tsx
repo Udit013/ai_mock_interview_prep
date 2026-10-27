@@ -37,7 +37,7 @@ const RootLayout = async ({ children }: { children: ReactNode }) => {
                 redirect("/sign-in");
               }}
             >
-              <button type="submit" className="nav-link">
+              <button type="submit" className="nav-link" aria-label="Sign out">
                 <span className="sm:hidden">Sign out</span>
                 <span className="max-sm:hidden">Sign Out</span>
               </button>

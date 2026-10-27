@@ -7,9 +7,18 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { Form } from "@/components/ui/form";
+import {
+  Form,
+  FormControl,
+  FormDescription,
+  FormField as UIFormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/components/ui/form";
 import FormField from "@/components/FormField";
 import { COMPANY_MODES } from "@/constants/companies";
+import { MAX_JD_CHARS, MIN_JD_CHARS } from "@/lib/interview/job-description";
 
 const schema = z.object({
   role: z.string().min(2, "Role must be at least 2 characters"),
@@ -18,6 +27,14 @@ const schema = z.object({
   techstack: z.string().optional(),
   amount: z.coerce.number().min(3).max(15),
   companyMode: z.string().optional(),
+  jobDescription: z
+    .string()
+    .max(MAX_JD_CHARS, `Keep it under ${MAX_JD_CHARS.toLocaleString()} characters — trim boilerplate like benefits and legal text.`)
+    .optional()
+    .refine(
+      (v) => !v || v.trim().length === 0 || v.trim().length >= MIN_JD_CHARS,
+      "Paste the full job description, or leave this empty."
+    ),
 });
 
 type FormValues = z.infer<typeof schema>;
@@ -53,6 +70,7 @@ const InterviewForm = () => {
       techstack: "",
       amount: 5,
       companyMode: "",
+      jobDescription: "",
     },
   });
 
@@ -103,6 +121,7 @@ const InterviewForm = () => {
           source: mode,
           visibility,
           resumeContext: mode === "resume" ? resume : undefined,
+          jobDescription: values.jobDescription?.trim() || undefined,
         }),
       });
 
@@ -236,6 +255,52 @@ const InterviewForm = () => {
               name="role"
               label="Job Role"
               placeholder="e.g. Frontend Developer, ML Engineer…"
+            />
+
+            <UIFormField
+              control={form.control}
+              name="jobDescription"
+              render={({ field }) => {
+                const length = field.value?.trim().length ?? 0;
+                const active = length >= MIN_JD_CHARS;
+                return (
+                  <FormItem>
+                    <FormLabel className="label">
+                      Job description (optional)
+                    </FormLabel>
+                    <FormControl>
+                      <textarea
+                        {...field}
+                        rows={6}
+                        placeholder="Paste the job posting — responsibilities, requirements, nice-to-haves…"
+                        className="w-full resize-y rounded-2xl border border-white/5 bg-dark-200 px-5 py-4 text-sm leading-relaxed text-white placeholder:text-light-400 transition-colors hover:border-white/15 focus-visible:border-primary-200/60"
+                      />
+                    </FormControl>
+                    <div className="flex items-start justify-between gap-4">
+                      <FormDescription className="text-xs text-light-400">
+                        {!active
+                          ? "Paste a real posting and questions will target what this job actually asks for."
+                          : mode === "resume" && resume
+                          ? "Questions will connect your résumé to this job's requirements, probe gaps, and ask why you fit — like a real interview."
+                          : mode === "resume"
+                          ? "Upload your résumé too, and questions will connect your experience to this job."
+                          : "Questions will target this job's responsibilities and must-have requirements."}
+                      </FormDescription>
+                      <span
+                        aria-hidden="true"
+                        className={`shrink-0 text-xs tabular-nums ${
+                          (field.value?.length ?? 0) > MAX_JD_CHARS
+                            ? "text-destructive-100"
+                            : "text-light-400"
+                        }`}
+                      >
+                        {(field.value?.length ?? 0).toLocaleString()} / {MAX_JD_CHARS.toLocaleString()}
+                      </span>
+                    </div>
+                    <FormMessage />
+                  </FormItem>
+                );
+              }}
             />
 
             <div className="flex gap-4 max-sm:flex-col">

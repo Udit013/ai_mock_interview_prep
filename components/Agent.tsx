@@ -80,6 +80,7 @@ const Agent = ({
   level,
   interviewType,
   companyMode,
+  jobDescription,
   getCodeContext,
   compact = false,
   onActiveChange,
@@ -218,6 +219,7 @@ const Agent = ({
         activeQuestionIndex: activeQuestionIndexRef.current,
         deliverySignals: signals ?? undefined,
         companyMode,
+        jobDescription,
         codeSubmission: getCodeContext?.() ?? undefined,
       });
       setIsProcessing(false);
@@ -282,6 +284,7 @@ const Agent = ({
       level,
       interviewType,
       companyMode,
+      jobDescription,
       getCodeContext,
       onActiveQuestionChange,
       router,

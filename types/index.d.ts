@@ -106,6 +106,8 @@ interface Interview {
   // Cover art chosen once at creation time and persisted, so a card doesn't
   // change picture on every render.
   coverImage?: string;
+  // Pasted job posting the interview was tailored to (normalised, capped).
+  jobDescription?: string;
 }
 
 // ── Phase 5: Progress Dashboard ───────────────────────────────────────────────
@@ -228,6 +230,8 @@ interface AgentProps {
   interviewType?: string; // Technical | Behavioral | Mixed | System Design | Coding
   // Company template id (styles interviewer persona/prompts).
   companyMode?: string;
+  // Job posting this interview targets; sent with each turn.
+  jobDescription?: string;
   // Coding interviews: returns the candidate's current editor contents.
   getCodeContext?: () => CodeContextPayload | null;
   /** Slim voice-bar rendering for the split-screen coding layout. */

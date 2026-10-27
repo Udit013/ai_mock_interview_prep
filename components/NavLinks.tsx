@@ -25,6 +25,9 @@ const NavLinks = () => {
             key={href}
             href={href}
             aria-current={active ? "page" : undefined}
+            // The visible text switches between short and full labels by
+            // screen size; an explicit name keeps it consistent everywhere.
+            aria-label={label}
             // The dashboard link is redundant with the logo on phones.
             className={cn("nav-link", !short && "max-sm:hidden", active && "nav-link-active")}
           >

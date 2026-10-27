@@ -8,6 +8,10 @@ import {
   codeSubmissionSchema,
 } from "@/lib/ai/adaptive";
 import { companyPromptBlock } from "@/constants/companies";
+import {
+  MAX_JD_CHARS,
+  normalizeJobDescription,
+} from "@/lib/interview/job-description";
 import { isNonAnswer, planSkipTurn } from "@/lib/interview/non-answer";
 import { getCurrentUser } from "@/lib/actions/auth.action";
 import { checkRateLimit, RATE_LIMITS } from "@/lib/rate-limit";
@@ -41,6 +45,8 @@ const respondBodySchema = z.object({
   codeSubmission: codeSubmissionSchema.optional(),
   // Company template id — styles prompts only, so client-supplied is fine.
   companyMode: z.string().max(30).optional(),
+  // Job posting the interview targets (the candidate's own interview context).
+  jobDescription: z.string().max(MAX_JD_CHARS * 2).optional(),
   // Which seed question is currently being discussed, so an unanswered
   // question can be skipped deterministically without asking the model.
   activeQuestionIndex: z.coerce
@@ -101,6 +107,7 @@ export async function POST(request: Request) {
       codeSubmission,
       companyMode,
       activeQuestionIndex,
+      jobDescription,
     } = parsed.data;
 
     const maxExchanges = maxExchangesFor(questions.length);
@@ -157,6 +164,7 @@ export async function POST(request: Request) {
       deliverySignals,
       codeSubmission,
       companyBlock: companyPromptBlock(companyMode),
+      jobDescription: normalizeJobDescription(jobDescription) ?? undefined,
       activeQuestionIndex,
       topicTurns: interviewState?.topicTurns ?? 0,
     });

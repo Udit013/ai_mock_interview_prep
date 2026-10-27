@@ -1,6 +1,6 @@
 # PrepWise — AI Interview Intelligence Platform
 
-A full-stack, AI-powered interview platform that conducts **adaptive voice interviews** with a genuinely human interviewer — one that reacts to your **hesitation and confidence**, reviews your **live code**, adapts to **company-specific styles** — plus résumé-aware questions, speaking analytics, replay, shareable reports, and progress tracking. Entirely free, with no paid API dependencies.
+A full-stack, AI-powered interview platform that conducts **adaptive voice interviews** with a genuinely human interviewer — one that reacts to your **hesitation and confidence**, reviews your **live code**, adapts to **company-specific styles** — plus résumé- and job-description-targeted questions, speaking analytics, replay, shareable reports, and progress tracking. Entirely free, with no paid API dependencies.
 
 ## Live Demo
 
@@ -28,6 +28,11 @@ A full-stack, AI-powered interview platform that conducts **adaptive voice inter
 ### Résumé-Aware Interviews
 - Upload a **PDF résumé**; text is extracted with `unpdf` (serverless, no native deps) and structured by Gemini into skills, projects, experiences, and technologies.
 - Questions reference your **actual experience** — e.g. *"Why did you choose DeBERTa over BERT in your Aphasia Detection project?"* or *"Walk me through the deployment architecture of RxFlow."*
+
+### Job-Description Interviews
+- Paste a **job posting** to target an interview at one specific role. On its own, questions come from the posting's responsibilities and must-have requirements.
+- Add your **résumé** too and it works like a real interview loop: questions connect your experience to the job's requirements, fairly probe requirements your résumé doesn't show, and ask why you fit — a split decided in code (e.g. 2 / 2 / 1 for five questions), not left to the model.
+- The posting stays with the interview: the live interviewer's follow-ups favour what the role needs, and feedback says how ready you look for **this** role and which must-haves you didn't demonstrate. Pasted text is treated as untrusted data and size-capped.
 
 ### Speaking Analytics (no external speech APIs)
 - Deterministic, browser-computed metrics: **filler-word count**, **words per minute**, **speaking duration**, total words, plus actionable coaching insights.
