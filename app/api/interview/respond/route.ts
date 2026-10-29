@@ -8,6 +8,7 @@ import {
   codeSubmissionSchema,
 } from "@/lib/ai/adaptive";
 import { companyPromptBlock } from "@/constants/companies";
+import { MAX_COMPANY_CHARS, normalizeCompanyName } from "@/lib/interview/company";
 import {
   MAX_JD_CHARS,
   normalizeJobDescription,
@@ -47,6 +48,7 @@ const respondBodySchema = z.object({
   companyMode: z.string().max(30).optional(),
   // Job posting the interview targets (the candidate's own interview context).
   jobDescription: z.string().max(MAX_JD_CHARS * 2).optional(),
+  companyName: z.string().max(MAX_COMPANY_CHARS * 2).optional(),
   // Which seed question is currently being discussed, so an unanswered
   // question can be skipped deterministically without asking the model.
   activeQuestionIndex: z.coerce
@@ -108,6 +110,7 @@ export async function POST(request: Request) {
       companyMode,
       activeQuestionIndex,
       jobDescription,
+      companyName,
     } = parsed.data;
 
     const maxExchanges = maxExchangesFor(questions.length);
@@ -165,6 +168,7 @@ export async function POST(request: Request) {
       codeSubmission,
       companyBlock: companyPromptBlock(companyMode),
       jobDescription: normalizeJobDescription(jobDescription) ?? undefined,
+      companyName: normalizeCompanyName(companyName) ?? undefined,
       activeQuestionIndex,
       topicTurns: interviewState?.topicTurns ?? 0,
     });

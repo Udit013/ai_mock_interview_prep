@@ -105,13 +105,15 @@ const OPENING_GREETINGS = [
   (name: string) => `Hi ${name}, welcome — glad we could do this.`,
 ] as const;
 
+// `interview` is e.g. "Backend Engineer interview" or
+// "Backend Engineer interview for Stripe".
 const OPENING_FRAMES = [
-  (role: string, n: number) =>
-    `I'll be running your ${role} interview. We'll go through ${n} main ${n === 1 ? "topic" : "topics"}, and I'll dig into your answers as we go, so think of it as a conversation rather than a quiz.`,
-  (role: string, n: number) =>
-    `This is a ${role} interview — ${n} main ${n === 1 ? "area" : "areas"} to cover, with follow-ups wherever something you say is worth exploring.`,
-  (role: string, n: number) =>
-    `For this ${role} interview I've got ${n} ${n === 1 ? "topic" : "topics"} in mind, and I'll follow your lead where it gets interesting.`,
+  (interview: string, n: number) =>
+    `I'll be running your ${interview}. We'll go through ${n} main ${n === 1 ? "topic" : "topics"}, and I'll dig into your answers as we go, so think of it as a conversation rather than a quiz.`,
+  (interview: string, n: number) =>
+    `This is your ${interview} — ${n} main ${n === 1 ? "area" : "areas"} to cover, with follow-ups wherever something you say is worth exploring.`,
+  (interview: string, n: number) =>
+    `For this ${interview} I've got ${n} ${n === 1 ? "topic" : "topics"} in mind, and I'll follow your lead where it gets interesting.`,
 ] as const;
 
 const OPENING_REASSURANCES = [
@@ -133,23 +135,28 @@ const FIRST_QUESTION_LEADS = [
 export function buildOpening({
   userName,
   role,
+  company,
   questionCount,
   firstQuestion,
   seed = Math.floor(Math.random() * 1000),
 }: {
   userName: string;
   role?: string;
+  company?: string;
   questionCount: number;
   firstQuestion: string;
   seed?: number;
 }): string {
   const roleLabel = role?.trim() || "mock";
+  const interviewLabel = company?.trim()
+    ? `${roleLabel} interview for ${company.trim()}`
+    : `${roleLabel} interview`;
   const n = Math.max(questionCount, 1);
   const lead = pick(FIRST_QUESTION_LEADS, seed + 3);
 
   return [
     pick(OPENING_GREETINGS, seed)(userName),
-    pick(OPENING_FRAMES, seed + 1)(roleLabel, n),
+    pick(OPENING_FRAMES, seed + 1)(interviewLabel, n),
     pick(OPENING_REASSURANCES, seed + 2),
     `${lead} ${firstQuestion}`.trim(),
   ].join(" ");

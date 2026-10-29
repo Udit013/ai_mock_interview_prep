@@ -96,45 +96,6 @@ export const mappings: Record<string, string> = {
   "aws amplify": "amplify",
 };
 
-export const interviewCovers = [
-  "/adobe.png",
-  "/amazon.png",
-  "/facebook.png",
-  "/hostinger.png",
-  "/pinterest.png",
-  "/quora.png",
-  "/reddit.png",
-  "/skype.png",
-  "/spotify.png",
-  "/telegram.png",
-  "/tiktok.png",
-  "/yahoo.png",
-];
-
-export const dummyInterviews: Interview[] = [
-  {
-    id: "1",
-    userId: "user1",
-    role: "Frontend Developer",
-    type: "Technical",
-    techstack: ["React", "TypeScript", "Next.js", "Tailwind CSS"],
-    level: "Junior",
-    questions: ["What is React?"],
-    finalized: true,
-    createdAt: "2024-03-15T10:00:00Z",
-  },
-  {
-    id: "2",
-    userId: "user1",
-    role: "Full Stack Developer",
-    type: "Mixed",
-    techstack: ["Node.js", "Express", "MongoDB", "React"],
-    level: "Senior",
-    questions: ["What is Node.js?"],
-    finalized: true,
-    createdAt: "2024-03-14T15:30:00Z",
-  },
-];
 
 export const feedbackSchema = z.object({
   totalScore: z.number().min(0).max(100),

@@ -84,7 +84,7 @@ const Page = async () => {
                 type={interview.type}
                 techstack={interview.techstack}
                 createdAt={interview.createdAt}
-                coverImage={interview.coverImage}
+                companyName={interview.companyName}
                 feedback={feedbackByInterview.get(interview.id) ?? null}
                 visibility={interview.visibility ?? "public"}
               />
@@ -114,7 +114,7 @@ const Page = async () => {
                 type={interview.type}
                 techstack={interview.techstack}
                 createdAt={interview.createdAt}
-                coverImage={interview.coverImage}
+                companyName={interview.companyName}
               />
             ))
           ) : (

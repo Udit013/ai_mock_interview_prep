@@ -1,4 +1,4 @@
-import { interviewCovers, mappings } from "@/constants";
+import { mappings } from "@/constants";
 import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
 
@@ -47,7 +47,3 @@ export const getTechLogos = async (techArray: string[]) =>
     })
   );
 
-export const getRandomInterviewCover = () => {
-  const randomIndex = Math.floor(Math.random() * interviewCovers.length);
-  return `/covers${interviewCovers[randomIndex]}`;
-};

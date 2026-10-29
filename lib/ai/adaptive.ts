@@ -4,6 +4,7 @@ import { MODEL_MAX_RETRIES, withModelFallback } from "@/lib/ai/models";
 import { z } from "zod";
 import {
   askedQuestions,
+  buildTransition,
   extractQuestions,
   isNearDuplicate,
   limitToOneQuestion,
@@ -11,6 +12,7 @@ import {
   stripScriptedOpener,
 } from "@/lib/interview/conversation";
 import { JD_TURN_CHARS, jobDescriptionBlock } from "@/lib/interview/job-description";
+import { cleanSpokenText, isDegenerateReply } from "@/lib/interview/speech-text";
 
 /** Live model of how the interview is going, carried across turns. */
 export const interviewStateSchema = z.object({
@@ -179,10 +181,57 @@ interface RunAdaptiveTurnArgs {
   companyBlock?: string;
   /** Job posting the interview targets, already normalised. */
   jobDescription?: string;
+  /** Employer the candidate is interviewing with, already normalised. */
+  companyName?: string;
   /** Seed question being discussed before this turn. */
   activeQuestionIndex?: number;
   /** Turns already spent on that seed question (follow-ups included). */
   topicTurns?: number;
+}
+
+/**
+ * Output cap for one turn. A normal turn is a few hundred tokens; the cap
+ * stops a model stuck in a repetition loop from streaming thousands of commas.
+ */
+export const TURN_MAX_TOKENS = 1500;
+
+/** Errors meaning "the model produced something unusable", worth one retry. */
+const isUnusableOutputError = (e: unknown) =>
+  /NoObjectGenerated|TypeValidation|JSONParse/i.test(
+    String((e as { name?: string })?.name ?? "")
+  );
+
+/**
+ * A clean, scripted turn used when the model's reply is unusable twice in a
+ * row. The candidate hears a natural bridge to the next question instead of
+ * garbage, and the interview carries on. Pure, so it is unit-tested.
+ */
+export function fallbackTurn({
+  seedQuestions,
+  currentIndex,
+  currentState,
+  mustFinish,
+  seed = 0,
+}: {
+  seedQuestions: string[];
+  currentIndex: number;
+  currentState: InterviewStateSchema;
+  mustFinish: boolean;
+  seed?: number;
+}): AdaptiveTurn {
+  const next = currentIndex + 1;
+  const finish = mustFinish || next >= seedQuestions.length;
+  const acks = ["Thanks, that's helpful.", "Got it, thank you.", "Okay, thanks for walking me through that."];
+  const ack = acks[((seed % acks.length) + acks.length) % acks.length];
+  return {
+    evaluation: { depth: "adequate", note: "Model reply was unusable; scripted transition used." },
+    action: finish ? "finish" : "next_topic",
+    updatedState: currentState,
+    activeQuestionIndex: finish ? Math.max(Math.min(currentIndex, seedQuestions.length - 1), 0) : next,
+    spokenResponse: finish
+      ? `${ack} That's everything I wanted to cover today. I'll put your feedback together now.`
+      : `${ack} ${buildTransition(seed)} ${seedQuestions[next]}`,
+  };
 }
 
 /** Follow-ups allowed on one seed question before moving on. */
@@ -230,6 +279,7 @@ export async function runAdaptiveTurn(
     codeSubmission,
     companyBlock,
     jobDescription,
+    companyName,
     activeQuestionIndex = 0,
     topicTurns = 0,
   } = args;
@@ -278,6 +328,10 @@ export async function runAdaptiveTurn(
 
   const prompt = `You are an experienced ${role} interviewer running a live ${level}-level ${type} interview over voice. You have interviewed hundreds of candidates: you are warm but rigorous, curious about how they think, and you talk like a person, not a script. ${typeGuidance}
 ${companyBlock ?? ""}${
+    companyName
+      ? `\nYou are interviewing on behalf of ${companyName}. Speak as part of that team ("our product", "on our team") where it's natural.\n`
+      : ""
+  }${
     jobDescription
       ? `\n${jobDescriptionBlock(jobDescription, JD_TURN_CHARS)}\nInterview for THIS job: when you follow up or change topic, favour what the role actually requires, and connect the candidate's answers to its responsibilities.\n`
       : ""
@@ -338,12 +392,42 @@ Update the interview state (carry forward prior strengths, weaknesses, and topic
     withModelFallback("interview", (model) => generateObject({
       model,
       maxRetries: MODEL_MAX_RETRIES,
+      maxTokens: TURN_MAX_TOKENS,
       abortSignal: aiAbortSignal(),
       schema: adaptiveTurnSchema,
       prompt: prompt + extra,
     })).then((r) => r.object);
 
-  let object = await generate();
+  /** One model attempt; null when the output is unusable (cut off, unparseable). */
+  const attempt = async (extra = "") => {
+    try {
+      return await generate(extra);
+    } catch (e) {
+      if (isUnusableOutputError(e)) return null;
+      throw e; // timeouts, quota, network: surface so the client can retry
+    }
+  };
+
+  // Degeneration guard: a small model can loop ("comma, comma, comma…") or
+  // echo its instructions. Retry once; if that is unusable too, use a clean
+  // scripted transition so the candidate never hears garbage.
+  let object = await attempt();
+  if (!object || isDegenerateReply(object.spokenResponse)) {
+    console.warn("adaptive turn: unusable reply, retrying once");
+    object = await attempt(
+      `\n\nYour previous reply was malformed. Reply with 2-3 short, natural spoken sentences and exactly one question.`
+    );
+  }
+  if (!object || isDegenerateReply(object.spokenResponse)) {
+    console.warn("adaptive turn: unusable reply twice, using scripted transition");
+    object = fallbackTurn({
+      seedQuestions,
+      currentIndex,
+      currentState,
+      mustFinish,
+      seed: exchangeCount,
+    });
+  }
 
   // Repetition guard: one retry when the draft re-asks an earlier question.
   // Rare, and the only fix that needs the model — so it's the only one that
@@ -352,15 +436,19 @@ Update the interview state (carry forward prior strengths, weaknesses, and topic
     isNearDuplicate(q, alreadyAsked)
   );
   if (repeated && !mustFinish) {
-    object = await generate(
+    const retry = await attempt(
       `\n\nYour previous draft asked "${repeated}", which repeats an earlier question. Ask something genuinely new instead.`
     );
+    if (retry && !isDegenerateReply(retry.spokenResponse)) object = retry;
   }
 
-  // Free, deterministic polish: no graded opener, one question at a time.
+  // Free, deterministic polish: no graded opener, one question at a time,
+  // nothing a speech engine would read literally.
   object = {
     ...object,
-    spokenResponse: limitToOneQuestion(stripScriptedOpener(object.spokenResponse)),
+    spokenResponse: cleanSpokenText(
+      limitToOneQuestion(stripScriptedOpener(object.spokenResponse))
+    ),
   };
 
   // Deterministic termination: the cap wins over the model's choice.

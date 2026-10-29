@@ -29,6 +29,15 @@ A full-stack, AI-powered interview platform that conducts **adaptive voice inter
 - Upload a **PDF résumé**; text is extracted with `unpdf` (serverless, no native deps) and structured by Gemini into skills, projects, experiences, and technologies.
 - Questions reference your **actual experience** — e.g. *"Why did you choose DeBERTa over BERT in your Aphasia Detection project?"* or *"Walk me through the deployment architecture of RxFlow."*
 
+### Natural, Interruptible Voice
+- **Skip, answer now** stops the interviewer mid-sentence and goes straight to your answer.
+- Replies are checked before they're spoken: a malformed one (e.g. a model repetition loop) is regenerated, or replaced by a natural scripted transition — you never hear garbage. Speech plays sentence by sentence with a stall guard, and answers send after 3 seconds of silence.
+
+### Creating an Interview
+- Enter the role and, optionally, the **company** you're interviewing with — it shapes the questions and the interviewer ("on our team at Stripe"), and a company with a built-in style (Google, Amazon…) applies it automatically.
+- **Start interview now** opens it and begins straight away; **Save for later** keeps it on your dashboard.
+- Cards show a clean monogram of the company or role — no stock brand logos.
+
 ### Job-Description Interviews
 - Paste a **job posting** to target an interview at one specific role. On its own, questions come from the posting's responsibilities and must-have requirements.
 - Add your **résumé** too and it works like a real interview loop: questions connect your experience to the job's requirements, fairly probe requirements your résumé doesn't show, and ask why you fit — a split decided in code (e.g. 2 / 2 / 1 for five questions), not left to the model.

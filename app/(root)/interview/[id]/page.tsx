@@ -1,11 +1,11 @@
 import type { Metadata } from "next";
 import React from "react";
 import { redirect } from "next/navigation";
-import Image from "next/image";
 import Link from "next/link";
 import Agent from "@/components/Agent";
 import CodingInterview from "@/components/CodingInterview";
 import DisplayTechIcons from "@/components/DisplayTechIcons";
+import InterviewAvatar from "@/components/InterviewAvatar";
 import { getCompanyMode } from "@/constants/companies";
 import { getCurrentUser } from "@/lib/actions/auth.action";
 import {
@@ -19,8 +19,10 @@ export const maxDuration = 60;
 
 export const metadata: Metadata = { title: "Interview" };
 
-const Page = async ({ params }: RouteParams) => {
+const Page = async ({ params, searchParams }: RouteParams) => {
   const { id } = await params;
+  // Set by "Start interview now" on the create form.
+  const autoStart = (await searchParams)?.start === "1";
 
   const [user, interview] = await Promise.all([
     getCurrentUser(),
@@ -53,12 +55,10 @@ const Page = async ({ params }: RouteParams) => {
 
       <div className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-dark-300 bg-dark-200/40 px-5 py-4">
         <div className="flex flex-wrap items-center gap-4">
-          <Image
-            src="/robot.png"
-            alt=""
-            width={40}
-            height={40}
-            className="rounded-full object-cover size-10"
+          <InterviewAvatar
+            company={interview.companyName}
+            role={interview.role}
+            size={44}
           />
           <div className="flex flex-col">
             <h1 className="capitalize leading-tight text-2xl font-semibold">
@@ -66,7 +66,10 @@ const Page = async ({ params }: RouteParams) => {
             </h1>
             <p className="text-xs text-light-400 capitalize">
               {interview.level} level
-              {company ? ` · ${company.name} style` : ""}
+              {interview.companyName ? ` · ${interview.companyName}` : ""}
+              {company && company.name !== interview.companyName
+                ? ` · ${company.name} style`
+                : ""}
             </p>
           </div>
 
@@ -104,6 +107,8 @@ const Page = async ({ params }: RouteParams) => {
           level={interview.level}
           companyMode={interview.companyMode}
           jobDescription={interview.jobDescription}
+          companyName={interview.companyName}
+          autoStart={autoStart}
         />
       ) : (
         <Agent
@@ -118,6 +123,8 @@ const Page = async ({ params }: RouteParams) => {
           interviewType={interview.type}
           companyMode={interview.companyMode}
           jobDescription={interview.jobDescription}
+          companyName={interview.companyName}
+          autoStart={autoStart}
         />
       )}
     </>

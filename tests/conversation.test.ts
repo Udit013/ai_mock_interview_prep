@@ -141,6 +141,11 @@ describe("buildOpening", () => {
     }
   });
 
+  it("mentions the company when one is given", () => {
+    const line = buildOpening({ ...base, company: "Stripe", seed: 0 });
+    expect(line).toContain("Backend Engineer interview for Stripe");
+  });
+
   it("handles a single topic and a missing role gracefully", () => {
     const line = buildOpening({ ...base, role: "", questionCount: 1, seed: 0 });
     expect(line).not.toMatch(/undefined|1 topics|1 areas/);

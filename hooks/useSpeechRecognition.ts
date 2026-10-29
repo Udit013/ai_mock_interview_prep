@@ -70,7 +70,7 @@ interface UseSpeechRecognitionOptions {
 
 export function useSpeechRecognition({
   onFinalize,
-  silenceMs = 3500,
+  silenceMs = 3000,
   lang = "en-US",
 }: UseSpeechRecognitionOptions) {
   const [isSupported, setIsSupported] = useState(true);

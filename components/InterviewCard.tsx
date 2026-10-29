@@ -1,15 +1,13 @@
 import dayjs from 'dayjs';
 import Image from "next/image";
-import {getRandomInterviewCover, cn} from "@/lib/utils";
+import {cn} from "@/lib/utils";
+import InterviewAvatar from "@/components/InterviewAvatar";
 import {Button} from "@/components/ui/button";
 import Link from "next/link";
 import DisplayTechIcons from "@/components/DisplayTechIcons";
 
-const InterviewCard = ({ interviewId, role, type, techstack, createdAt, feedback = null, visibility, coverImage }: InterviewCardProps) => {
+const InterviewCard = ({ interviewId, role, type, techstack, createdAt, feedback = null, visibility, companyName }: InterviewCardProps) => {
     const normalizedType = /mix/gi.test(type) ? 'Mixed' : type;
-    // Use the cover persisted at creation time; only fall back to a random one
-    // for legacy documents that predate the stored field.
-    const cover = coverImage ?? getRandomInterviewCover();
     const formattedDate = dayjs(feedback?.createdAt || createdAt || Date.now()).format('MMM D, YYYY');
     const isPrivate = visibility === 'private';
 
@@ -21,7 +19,7 @@ const InterviewCard = ({ interviewId, role, type, techstack, createdAt, feedback
                       <p className="badge-text">{normalizedType}</p>
                   </div>
 
-                  <Image src={cover} alt="" width={90} height={90} className="rounded-full object-cover size-[90px] ring-2 ring-primary-200/20" />
+                  <InterviewAvatar company={companyName} role={role} />
 
                   {visibility && (
                       <span
@@ -40,6 +38,9 @@ const InterviewCard = ({ interviewId, role, type, techstack, createdAt, feedback
                   <h3 className="mt-5 capitalize">
                       {role} Interview
                   </h3>
+                  {companyName && (
+                      <p className="mt-1 text-sm text-light-400">at {companyName}</p>
+                  )}
 
                   <div className="flex flex-row gap-5 mt-3">
                       <div className="flex flex-row gap-2">

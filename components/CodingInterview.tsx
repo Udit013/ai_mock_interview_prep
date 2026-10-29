@@ -17,6 +17,8 @@ interface CodingInterviewProps {
   level: string;
   companyMode?: string;
   jobDescription?: string;
+  companyName?: string;
+  autoStart?: boolean;
 }
 
 /**
@@ -71,6 +73,8 @@ const CodingInterview = (props: CodingInterviewProps) => {
           interviewType="Coding"
           companyMode={props.companyMode}
           jobDescription={props.jobDescription}
+          companyName={props.companyName}
+          autoStart={props.autoStart}
           getCodeContext={getCodeContext}
           compact
           onActiveChange={setInterviewActive}

@@ -19,6 +19,7 @@ import {
 import FormField from "@/components/FormField";
 import { COMPANY_MODES } from "@/constants/companies";
 import { MAX_JD_CHARS, MIN_JD_CHARS } from "@/lib/interview/job-description";
+import { MAX_COMPANY_CHARS, matchCompanyMode } from "@/lib/interview/company";
 
 const schema = z.object({
   role: z.string().min(2, "Role must be at least 2 characters"),
@@ -27,6 +28,10 @@ const schema = z.object({
   techstack: z.string().optional(),
   amount: z.coerce.number().min(3).max(15),
   companyMode: z.string().optional(),
+  companyName: z
+    .string()
+    .max(MAX_COMPANY_CHARS, `Keep the company name under ${MAX_COMPANY_CHARS} characters.`)
+    .optional(),
   jobDescription: z
     .string()
     .max(MAX_JD_CHARS, `Keep it under ${MAX_JD_CHARS.toLocaleString()} characters — trim boilerplate like benefits and legal text.`)
@@ -60,6 +65,9 @@ const InterviewForm = () => {
   const [resume, setResume] = useState<ParsedResumeData | null>(null);
   const [resumeFileName, setResumeFileName] = useState<string>("");
   const fileInputRef = useRef<HTMLInputElement>(null);
+  /** Which button submitted the form: open the interview now, or save it. */
+  const intentRef = useRef<"start" | "save">("start");
+  const [intent, setIntent] = useState<"start" | "save">("start");
 
   const form = useForm<FormValues>({
     resolver: zodResolver(schema),
@@ -70,6 +78,7 @@ const InterviewForm = () => {
       techstack: "",
       amount: 5,
       companyMode: "",
+      companyName: "",
       jobDescription: "",
     },
   });
@@ -110,6 +119,14 @@ const InterviewForm = () => {
       return;
     }
 
+    // Typing a company we have an interview style for (e.g. "Google") applies
+    // that style automatically unless one was picked explicitly.
+    const companyName = values.companyName?.trim() || undefined;
+    const companyMode =
+      values.companyMode ||
+      matchCompanyMode(companyName, Object.values(COMPANY_MODES))?.id ||
+      "";
+
     setLoading(true);
     try {
       const res = await fetch("/api/vapi/generate", {
@@ -122,6 +139,8 @@ const InterviewForm = () => {
           visibility,
           resumeContext: mode === "resume" ? resume : undefined,
           jobDescription: values.jobDescription?.trim() || undefined,
+          companyName,
+          companyMode,
         }),
       });
 
@@ -140,7 +159,12 @@ const InterviewForm = () => {
       const data = await res.json();
       if (!data.success) throw new Error(data.error ?? "Generation failed");
 
-      toast.success("Interview created — find it on your dashboard.");
+      if (intentRef.current === "start" && data.interviewId) {
+        toast.success("Interview ready — starting now.");
+        router.push(`/interview/${data.interviewId}?start=1`);
+        return;
+      }
+      toast.success("Interview saved — find it on your dashboard.");
       router.push("/");
       router.refresh();
     } catch (e) {
@@ -255,6 +279,14 @@ const InterviewForm = () => {
               name="role"
               label="Job Role"
               placeholder="e.g. Frontend Developer, ML Engineer…"
+            />
+
+            <FormField
+              control={form.control}
+              name="companyName"
+              label="Company (optional)"
+              placeholder="e.g. Stripe, Google, Deloitte"
+              autoComplete="organization"
             />
 
             <UIFormField
@@ -431,17 +463,41 @@ const InterviewForm = () => {
               </p>
             </div>
 
-            <Button
-              type="submit"
-              disabled={loading || (mode === "resume" && !resume)}
-              className="btn-primary mt-2"
-            >
-              {loading
-                ? "Generating Questions…"
-                : mode === "resume"
-                ? "Generate Interview From Résumé"
-                : "Generate Interview"}
-            </Button>
+            <div className="mt-2 flex flex-wrap gap-3 max-sm:flex-col">
+              <Button
+                type="submit"
+                onClick={() => {
+                  intentRef.current = "start";
+                  setIntent("start");
+                }}
+                disabled={loading || (mode === "resume" && !resume)}
+                aria-busy={loading && intent === "start"}
+                className="btn-primary max-sm:w-full"
+              >
+                {loading && intent === "start"
+                  ? "Preparing your interview…"
+                  : "Start interview now"}
+              </Button>
+              <Button
+                type="submit"
+                onClick={() => {
+                  intentRef.current = "save";
+                  setIntent("save");
+                }}
+                disabled={loading || (mode === "resume" && !resume)}
+                aria-busy={loading && intent === "save"}
+                className="btn-secondary max-sm:w-full"
+              >
+                {loading && intent === "save" ? "Saving…" : "Save for later"}
+              </Button>
+            </div>
+            <p className="text-xs text-light-400">
+              Questions take a few seconds to generate.{" "}
+              {mode === "resume"
+                ? "They'll reference your résumé"
+                : "They'll be tailored to the role"}
+              {form.watch("jobDescription")?.trim() ? " and the job description" : ""}.
+            </p>
           </form>
         </Form>
       </div>

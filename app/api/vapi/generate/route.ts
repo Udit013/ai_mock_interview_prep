@@ -2,7 +2,6 @@ import { generateText } from "ai";
 import { aiAbortSignal } from "@/lib/ai/limits";
 import { MODEL_MAX_RETRIES, withModelFallback } from "@/lib/ai/models";
 import { z } from "zod";
-import { getRandomInterviewCover } from "@/lib/utils";
 import { db } from "@/firebase/admin";
 import { getCurrentUser } from "@/lib/actions/auth.action";
 import { resumeSchema, type ResumeSchema } from "@/lib/ai/resume";
@@ -12,6 +11,7 @@ import {
   sanitizeQuestions,
   meetsMinimumCount,
 } from "@/lib/interview/question-quality";
+import { MAX_COMPANY_CHARS, normalizeCompanyName } from "@/lib/interview/company";
 import {
   MAX_JD_CHARS,
   jobDescriptionBlock,
@@ -50,6 +50,8 @@ const generateBodySchema = z.object({
   // Optional pasted job posting. Bounded generously (raw pastes carry extra
   // whitespace); normalised and capped before use.
   jobDescription: z.string().max(MAX_JD_CHARS * 2).optional(),
+  // Optional employer the candidate is interviewing with ("Stripe").
+  companyName: z.string().max(MAX_COMPANY_CHARS * 2).optional(),
 });
 
 /**
@@ -131,6 +133,7 @@ export async function POST(request: Request) {
       visibility,
       companyMode,
       jobDescription: rawJobDescription,
+      companyName: rawCompanyName,
     } = parsedBody.data;
 
     // Only persist known company modes; unknown ids degrade to generic.
@@ -142,6 +145,10 @@ export async function POST(request: Request) {
     // A job description targets the whole set at one posting; with a résumé it
     // becomes a real-interview mix of overlap, gap, and fit questions.
     const jobDescription = normalizeJobDescription(rawJobDescription);
+    const companyName = normalizeCompanyName(rawCompanyName);
+    const employerLine = companyName
+      ? `\nThe candidate is interviewing at ${companyName}. Write as that company's interviewer: refer to "our team" or "our product" naturally, and where it fits, set scenarios in the kind of work ${companyName} does.\n`
+      : "";
     const jobBlock = jobDescription
       ? `\n${jobDescriptionBlock(jobDescription)}\n\n${jobQuestionInstructions({
           type,
@@ -186,7 +193,7 @@ Return ONLY a JSON array of strings, like:
 
     const prompt = isResume
       ? `You are an experienced interviewer preparing ${amount} questions for a ${level} ${role} candidate, leaning towards ${type} questions.
-${companyBlock}${typeInstructions}
+${companyBlock}${employerLine}${typeInstructions}
 
 Base the questions on THIS candidate's actual résumé below. Reference their real projects, technologies, and decisions by name, and probe the "why" behind their choices and the depth of their ownership. Spread the questions across different projects and skills rather than drilling one project repeatedly.
 
@@ -208,7 +215,7 @@ ${
     ? `No tech stack was specified separately — take the skills and tools from the job description.`
     : `No tech stack was specified. Infer the skills and tools a ${level} ${role} is actually expected to know, and ground technical questions in those. Do not ask the candidate which technologies they use — choose sensible ones for the role yourself.`
 }
-${companyBlock}${typeInstructions}
+${companyBlock}${employerLine}${typeInstructions}
 ${jobBlock}
 ${craftRules}
 
@@ -279,13 +286,14 @@ ${outputRules}`;
       ...(company ? { companyMode: company.id } : {}),
       // Kept so the live interviewer and the feedback stay anchored to the job.
       ...(jobDescription ? { jobDescription } : {}),
-      coverImage: getRandomInterviewCover(),
+      ...(companyName ? { companyName } : {}),
       createdAt: new Date().toISOString(),
     };
 
-    await db.collection("interviews").add(interview);
+    const ref = await db.collection("interviews").add(interview);
 
-    return Response.json({ success: true }, { status: 200 });
+    // The id lets the client open the interview straight away ("Start now").
+    return Response.json({ success: true, interviewId: ref.id }, { status: 200 });
   } catch (error) {
     // Log the real cause server-side, but only echo messages we authored:
     // upstream provider errors can carry project ids and quota details.

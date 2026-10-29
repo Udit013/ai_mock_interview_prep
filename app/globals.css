@@ -262,10 +262,12 @@
     @apply border-gradient p-0.5 rounded-2xl w-full;
 
     .transcript {
-      @apply dark-gradient rounded-2xl  min-h-12 px-5 py-3 flex items-center justify-center;
+      @apply dark-gradient rounded-2xl min-h-12 max-h-56 overflow-y-auto px-5 py-3 flex items-center justify-center;
 
       p {
         @apply text-lg text-center text-white;
+        /* Never let an unbroken string run off the screen. */
+        overflow-wrap: anywhere;
       }
     }
   }
@@ -440,7 +442,7 @@ section {
   z-index: 40;
   margin-inline: -1rem;
   padding: 1rem;
-  background: rgba(8, 9, 13, 0.82);
+  background: rgba(8, 9, 13, 0.95);
   backdrop-filter: blur(14px) saturate(140%);
   -webkit-backdrop-filter: blur(14px) saturate(140%);
   border-bottom: 1px solid rgba(255, 255, 255, 0.05);
@@ -528,6 +530,27 @@ section {
   background: rgba(255, 255, 255, 0.02);
   color: var(--color-light-100);
   text-align: center;
+}
+
+/* "Skip, answer now" — interrupts the interviewer's speech. */
+.skip-speech {
+  margin-top: 0.75rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-height: 2.75rem;
+  padding: 0 1rem;
+  border-radius: 9999px;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--color-primary-100);
+  background: rgba(202, 197, 254, 0.1);
+  border: 1px solid rgba(202, 197, 254, 0.3);
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+}
+.skip-speech:hover {
+  background: rgba(202, 197, 254, 0.2);
 }
 
 /* Current page in the header, and loading skeletons. */

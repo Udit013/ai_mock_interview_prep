@@ -103,11 +103,13 @@ interface Interview {
   visibility?: "public" | "private";
   // Company template id (e.g. "google", "amazon", "mckinsey").
   companyMode?: string;
-  // Cover art chosen once at creation time and persisted, so a card doesn't
-  // change picture on every render.
+  // Legacy: random brand logos used to be stored here. No longer written or
+  // shown — cards use a monogram of the company or role instead.
   coverImage?: string;
   // Pasted job posting the interview was tailored to (normalised, capped).
   jobDescription?: string;
+  // Employer the candidate is interviewing with, if they entered one.
+  companyName?: string;
 }
 
 // ── Phase 5: Progress Dashboard ───────────────────────────────────────────────
@@ -209,7 +211,7 @@ interface InterviewCardProps {
   createdAt?: string;
   feedback?: Feedback | null;
   visibility?: "public" | "private";
-  coverImage?: string;
+  companyName?: string;
 }
 
 interface CodeContextPayload {
@@ -232,6 +234,10 @@ interface AgentProps {
   companyMode?: string;
   // Job posting this interview targets; sent with each turn.
   jobDescription?: string;
+  // Employer the interview is for; shapes the interviewer's framing.
+  companyName?: string;
+  // Begin as soon as the page opens (the "Start interview now" path).
+  autoStart?: boolean;
   // Coding interviews: returns the candidate's current editor contents.
   getCodeContext?: () => CodeContextPayload | null;
   /** Slim voice-bar rendering for the split-screen coding layout. */

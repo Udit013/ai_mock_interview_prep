@@ -73,6 +73,8 @@ Most AI interview tools evaluate the **transcript** — the words you said. Prep
 
 **It moves on when you're stuck.** Say "I don't know" and the interview advances immediately — a warm acknowledgement and the next question, with no model round trip and no re-asking. The detector ([`lib/interview/non-answer.ts`](lib/interview/non-answer.ts)) is deliberately conservative: *"I don't know the exact number, but I'd estimate ~50ms"* is a real answer and is never skipped. It requires a short utterance, no continuation marker ("but", "I think", "maybe"), **and** a refusal pattern before it will skip.
 
+**You can cut it off.** A **Skip, answer now** button stops the interviewer mid-sentence and opens your answer straight away. Every reply is checked before it's spoken — a malformed one (for example a model repetition loop) is regenerated once or replaced by a natural scripted transition, so you never hear garbage (§8.6).
+
 **It doesn't cut you off.** Speech recognition runs continuously so natural pauses don't end your answer; final segments accumulate rather than overwrite; a silence timer decides when you're actually done; and Chrome's periodic auto-stop is restarted transparently. The transcript is **editable before you send it**, so a mis-hearing is correctable — and if the mic is blocked or unsupported, you can type instead. See [`hooks/useSpeechRecognition.ts`](hooks/useSpeechRecognition.ts).
 
 So a candidate who *knows* the answer but delivers it hesitantly gets a different interview than one who delivers it crisply — the same way a human interviewer would react.
@@ -287,6 +289,7 @@ ai_mock_interview_prep/
 │   ├── InterviewForm.tsx         # Create-interview form (manual / résumé / job description)
 │   ├── NavLinks.tsx              # Header links with current-page state
 │   ├── ScoreRing.tsx             # Feedback score gauge (SVG, no deps)
+│   ├── InterviewAvatar.tsx       # Monogram of the company (or role) — replaces logos
 │   ├── InterviewCard.tsx         # Dashboard card
 │   ├── AuthForm.tsx              # Sign-in / sign-up (one component, two modes)
 │   ├── FormField.tsx             # Generic typed form field wrapper
@@ -323,14 +326,16 @@ ai_mock_interview_prep/
 │   │   ├── question-quality.ts   # Sanitize/validate generated question sets
 │   │   ├── conversation.ts       # Realism guards: near-duplicates, openers, one question per turn
 │   │   ├── job-description.ts    # ★ Job-targeted interviews: cleaning, delimiting, question mix
+│   │   ├── speech-text.ts        # ★ Garbage-reply detection + text cleaning before speech
+│   │   ├── company.ts            # Company name cleaning, style matching, monograms
 │   │   └── turn-client.ts        # Browser call to /respond: timeout + outcomes
 │   ├── runner/code-runner.ts     # ★ Web Worker code sandbox
 │   ├── rate-limit.ts             # Transactional Firestore rate limiter
-│   ├── utils.ts                  # cn(), tech logos, cover images
+│   ├── utils.ts                  # cn(), tech logos
 │   └── buffer-shim.js            # Node 22+ compat patch
 │
 ├── constants/
-│   ├── index.ts                  # tech mappings, covers, feedbackSchema
+│   ├── index.ts                  # tech mappings, feedbackSchema
 │   └── companies.ts              # ★ Company interview mode registry
 │
 ├── types/
@@ -344,8 +349,8 @@ ai_mock_interview_prep/
 ├── hooks/
 │   └── useSpeechRecognition.ts   # ★ Robust browser speech-to-text
 │
-├── tests/                        # Vitest — 16 files, 184 tests
-├── public/                       # Static assets (avatars, covers, icons)
+├── tests/                        # Vitest — 18 files, 201 tests
+├── public/                       # Static assets (avatars, icons — no brand logos)
 └── .github/workflows/ci.yml      # Typecheck + lint + tests on push/PR
 ```
 
@@ -426,16 +431,25 @@ if (!sessionUser || sessionUser.id !== userId) {
 **In this repo:** `speakText()` is a hand-built promise that resolves when the browser finishes speaking:
 
 ```ts
-const speakText = useCallback((text: string): Promise<void> =>
+const speakChunk = (text: string): Promise<void> =>
   new Promise((resolve) => {
     const utterance = new SpeechSynthesisUtterance(text);
-    utterance.onend = () => { setIsSpeaking(false); resolve(); };
-    utterance.onerror = () => { setIsSpeaking(false); resolve(); };  // resolve, not reject
+    const guard = setTimeout(done, 4000 + text.length * 90); // engine stalls happen
+    utterance.onend = done;
+    utterance.onerror = done;            // resolve, not reject
     window.speechSynthesis.speak(utterance);
-  }), []);
+  });
+
+const speakText = async (text: string) => {
+  const run = ++speechRunRef.current;
+  for (const chunk of splitIntoUtterances(cleanSpokenText(text))) {
+    if (speechRunRef.current !== run) break;   // "Skip, answer now" bumps the run
+    await speakChunk(chunk);
+  }
+};
 ```
 
-Note `onerror` calls `resolve()`, not `reject()`. If speech fails we still want the interview to continue to listening — a rejected promise would break the loop.
+Note `onerror` calls `resolve()`, not `reject()`. If speech fails we still want the interview to continue to listening — a rejected promise would break the loop. Speech is split into sentence-sized utterances: each starts quickly, a stalled one can't freeze the turn (the timeout guard), and **Skip** cancels between sentences by bumping `speechRunRef`, so the awaiting caller simply moves on to listening.
 
 ### Zod & Structured LLM Output
 
@@ -570,7 +584,8 @@ Created at signup. The document ID **is** the Firebase Auth UID, which is what l
   visibility: "public" | "private",// optional; absent ⇒ treated as public
   companyMode?: string,            // "google" | "amazon" | … (only if valid)
   jobDescription?: string,         // pasted posting (normalised, ≤6,000 chars) — see §8.5
-  coverImage: string,              // ⚠ stored but never read — see §23
+  companyName?: string,            // employer the candidate entered ("Stripe"), normalised
+  coverImage?: string,             // legacy only: random brand logos, no longer written or shown
   createdAt: string,               // ISO timestamp
 }
 ```
@@ -1041,6 +1056,23 @@ The cost is coupling: a schema change touches everything a turn does. Worth it h
 
 ---
 
+## 8.6 Speech Safety — `lib/interview/speech-text.ts`
+
+**A real production incident.** A live turn came back as a sentence, then **hundreds of commas**, then fragments of the prompt's own instructions ("Use paragraphs instead of bullet lists. Do not use bullet lists…"). The browser voice read every character — the candidate heard *"comma, comma, comma…"* with no way to stop it — and the unbroken string ran off both edges of the transcript box. Small models occasionally fall into repetition loops; nothing between the model and the speaker was checking.
+
+Defence in depth, cheapest first:
+
+| Layer | What it does |
+|---|---|
+| `maxTokens: 1500` on every turn | A loop can't stream thousands of tokens; a cut-off object fails parsing instead |
+| `isDegenerateReply` | Flags replies that are too long, mostly punctuation, a run of 8+ identical characters, a 4-word phrase repeated 3+ times, or leaked prompt text. Tested against the exact reply from the incident — and against legitimate lines with numbers ("1000000 requests"), "JSON", and "résumé bullet points", which must pass |
+| One retry, then `fallbackTurn()` | A malformed reply is regenerated once; if it's still unusable, a scripted, natural line ("Got it, thank you. Let's switch gears. <next seed question>") keeps the interview moving. Pure and schema-checked in tests |
+| `cleanSpokenText` | Strips markdown, collapses `,,,,` → `,`, and caps at 600 characters — ending on the question where possible |
+| Client: chunked speech + **Skip, answer now** | The candidate can always cut the interviewer off and answer immediately |
+| CSS | `overflow-wrap: anywhere` and a scrollable max height on the transcript, so no string can break the layout |
+
+---
+
 ## 8.5 Job-Description Interviews — `lib/interview/job-description.ts`
 
 Paste a job posting on the create form (optional, in both manual and résumé mode) and the whole interview targets that role.
@@ -1086,7 +1118,8 @@ Three Route Handlers. All three share the same defense sequence: **auth → rate
   "visibility": "public",       // optional
   "companyMode": "amazon",      // optional
   "resumeContext": { /* ParsedResume */ },  // required when source==="resume"
-  "jobDescription": "…"         // optional pasted posting; works with either source
+  "jobDescription": "…",        // optional pasted posting; works with either source
+  "companyName": "Stripe"       // optional employer; ≤60 chars, letters/digits/&.,'()+- only
 }
 ```
 
@@ -1114,7 +1147,7 @@ Three Route Handlers. All three share the same defense sequence: **auth → rate
 
 | Status | Body | When |
 |---|---|---|
-| 200 | `{ success: true }` | Created |
+| 200 | `{ success: true, interviewId }` | Created — the id lets "Start interview now" open it directly |
 | 400 | `{ success: false, error: "Invalid request." }` | Schema failure |
 | 401 | `{ success: false, error: "You must be signed in." }` | No session |
 | 429 | `{ success: false, error: "Daily interview-generation limit reached…" }` | >20/day |
@@ -1142,7 +1175,8 @@ Three Route Handlers. All three share the same defense sequence: **auth → rate
                        "wordCount": 84, "fillerCount": 3 },
   "codeSubmission": { "language": "python", "code": "…" },   // coding only
   "companyMode": "google",
-  "jobDescription": "…"               // optional; the interview's stored posting
+  "jobDescription": "…",              // optional; the interview's stored posting
+  "companyName": "Stripe"             // optional; the interview's stored employer
 }
 ```
 
@@ -1329,6 +1363,8 @@ function computeStreak(isoDates: string[]): number {
 | *(any unknown URL)* | `app/not-found.tsx` | RSC | Public — branded 404 |
 
 **Loading and errors.** `app/(root)/loading.tsx` streams a skeleton (announced as "Loading…" to screen readers) the moment a signed-in page is requested, so navigation never looks frozen while Firestore is read. `app/error.tsx` catches render errors with a "Try again" button; `app/global-error.tsx` covers a failure in the root layout itself and therefore uses inline styles only.
+
+**Creating an interview.** The form offers **Start interview now** and **Save for later**. Both submit the same request; the button sets an intent ref. "Start now" navigates to `/interview/<id>?start=1`; the page passes `autoStart` to the interviewer, which begins once and immediately strips the flag from the URL with `history.replaceState`, so a refresh doesn't restart. Because this is a client-side navigation, the click's user activation carries over and the browser allows speech. Typing a company that has a built-in style (e.g. "Google") applies that style automatically.
 
 **Navigation.** `NavLinks` (client component, `usePathname`) marks the current page with `aria-current="page"` and a highlighted pill. Links are 44 px tall; on phones they switch to short labels ("New", "Résumé"), with an explicit `aria-label` so the accessible name is the same at every size.
 
@@ -2289,7 +2325,7 @@ This codebase does (b), because most readers are only ever called from server co
 
 # 21. Testing & CI
 
-**184 tests across 16 files.** All target deterministic logic — no rendering, and no real network (the two files that touch `fetch` use a fake).
+**201 tests across 18 files.** All target deterministic logic — no rendering, and no real network (the two files that touch `fetch` use a fake).
 
 | File | Covers |
 |---|---|
@@ -2309,6 +2345,8 @@ This codebase does (b), because most readers are only ever called from server co
 | `conversation.test.ts` | Near-duplicate detection (and false-positive guards), openers, one-question limit, scripted-opener stripping, varied openings |
 | `models.test.ts` | Model chain from env vars, quota/404 detection incl. the SDK's RetryError shape, fallback order |
 | `job-description.test.ts` | JD cleaning and caps, untrusted-data delimiting, overlap/gap/fit split for every size 1–15 |
+| `speech-text.test.ts` | The production comma-loop reply, punctuation runs, echoed instructions, false-positive guards, cleaning, sentence chunking |
+| `company.test.ts` | Company-name cleaning and caps, built-in style matching, monograms, stable colours |
 
 **The testing philosophy is explicit:** test what is deterministic. There are no tests asserting Gemini returns particular text — that would be flaky and would test the model rather than the code. Instead:
 
@@ -2376,7 +2414,7 @@ These were all found and repaired; they're listed because the *reasoning* is mor
 | `lib/vapi.sdk.ts`, `types/vapi.d.ts` — leftovers from the removed Vapi integration | Deleted |
 | `components/ui/sonner.tsx` — a shadcn wrapper that nothing imported (`app/layout.tsx` imports `Toaster` straight from the `sonner` package) | Deleted |
 | `next-themes`, `lucide-react`, `tw-animate-css` — dependencies with zero import sites once `ui/sonner.tsx` went | Uninstalled |
-| Cover images re-randomised on every render, while the `coverImage` persisted at creation was never read | `coverImage` added to the type and passed through; random only as a fallback for legacy documents |
+| Cover images re-randomised on every render, while the `coverImage` persisted at creation was never read | First persisted; later **removed entirely** — the "covers" were real brands' logos (Pinterest, Spotify, TikTok…) implying affiliations that didn't exist. Cards now show `InterviewAvatar`, a monogram of the company the user entered, or of the role |
 | `JSON.parse` output stored as `questions` without checking it was a `string[]` | Validated with `z.array(z.string()).min(1)` — a model returning `{questions: […]}` now fails loudly instead of corrupting the interview |
 | Password rule `min(3)`, weaker than Firebase's server-side `min(6)` | `min(6)` with an explicit message |
 | Mic and speech synthesis kept running after navigating away mid-interview | Unmount cleanup aborts recognition and cancels speech |

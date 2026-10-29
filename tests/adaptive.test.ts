@@ -60,3 +60,32 @@ describe("interview state schemas", () => {
     ).toBe(false);
   });
 });
+
+import { fallbackTurn } from "@/lib/ai/adaptive";
+import { isDegenerateReply } from "@/lib/interview/speech-text";
+
+describe("fallbackTurn (used when the model's reply is unusable twice)", () => {
+  const seeds = ["Q1 about indexes?", "Q2 about caching?", "Q3 about queues?"];
+
+  it("bridges naturally to the next question and keeps the state", () => {
+    const t = fallbackTurn({ seedQuestions: seeds, currentIndex: 0, currentState: DEFAULT_INTERVIEW_STATE, mustFinish: false });
+    expect(t.action).toBe("next_topic");
+    expect(t.activeQuestionIndex).toBe(1);
+    expect(t.spokenResponse).toContain("Q2 about caching?");
+    expect(t.updatedState).toEqual(DEFAULT_INTERVIEW_STATE);
+    expect(isDegenerateReply(t.spokenResponse)).toBe(false);
+    expect(adaptiveTurnSchema.safeParse(t).success).toBe(true);
+  });
+
+  it("closes the interview on the last question or at the cap", () => {
+    for (const args of [
+      { currentIndex: 2, mustFinish: false },
+      { currentIndex: 0, mustFinish: true },
+    ]) {
+      const t = fallbackTurn({ seedQuestions: seeds, currentState: DEFAULT_INTERVIEW_STATE, ...args });
+      expect(t.action).toBe("finish");
+      expect(t.spokenResponse).toMatch(/feedback/i);
+      expect(adaptiveTurnSchema.safeParse(t).success).toBe(true);
+    }
+  });
+});

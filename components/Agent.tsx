@@ -16,6 +16,7 @@ import {
   type SpeechTiming,
 } from "@/hooks/useSpeechRecognition";
 import { buildOpening } from "@/lib/interview/conversation";
+import { cleanSpokenText, splitIntoUtterances } from "@/lib/interview/speech-text";
 import {
   postInterviewTurn,
   describeTurnFailure,
@@ -81,6 +82,8 @@ const Agent = ({
   interviewType,
   companyMode,
   jobDescription,
+  companyName,
+  autoStart = false,
   getCodeContext,
   compact = false,
   onActiveChange,
@@ -122,61 +125,92 @@ const Agent = ({
     if (messages.length > 0) {
       // The coding opening carries the problem text for the saved transcript;
       // it's already in the problem panel, so the bubble shows only the speech.
-      setLastMessage(
-        messages[messages.length - 1].content
-          .replace(/\n*\[Problem shown on screen\][\s\S]*$/, "")
-          .trim()
-      );
+      const last = messages[messages.length - 1];
+      const text = last.content
+        .replace(/\n*\[Problem shown on screen\][\s\S]*$/, "")
+        .trim();
+      // Show the interviewer's line exactly as it is spoken.
+      setLastMessage(last.role === "assistant" ? cleanSpokenText(text) : text);
     }
   }, [messages]);
 
   // ── Text-to-Speech ──────────────────────────────────────────────────────────
-  const speakText = useCallback((text: string): Promise<void> => {
-    return new Promise((resolve) => {
-      if (typeof window === "undefined" || !window.speechSynthesis) {
-        resolve();
-        return;
-      }
-      window.speechSynthesis.cancel();
+  /**
+   * Bumped to cancel speech in progress: each speakText call remembers the run
+   * it started, and stops between sentences as soon as the run changes.
+   */
+  const speechRunRef = useRef(0);
 
+  /** Speak one short utterance; always settles, even if the engine stalls. */
+  const speakChunk = useCallback((text: string): Promise<void> => {
+    return new Promise((resolve) => {
       const utterance = new SpeechSynthesisUtterance(text);
       utterance.lang = "en-US";
-      utterance.rate = 0.95;
+      utterance.rate = 1.0;
       utterance.pitch = 1.0;
 
-      const loadVoice = () => {
-        const voices = window.speechSynthesis.getVoices();
-        const preferred = voices.find(
-          (v) =>
-            v.lang.startsWith("en") &&
-            (v.name.includes("Samantha") ||
-              v.name.includes("Karen") ||
-              v.name.includes("Daniel") ||
-              v.name.includes("Google US English") ||
-              v.name.includes("Microsoft Aria"))
-        );
-        if (preferred) utterance.voice = preferred;
-      };
+      const voices = window.speechSynthesis.getVoices();
+      const preferred = voices.find(
+        (v) =>
+          v.lang.startsWith("en") &&
+          (v.name.includes("Samantha") ||
+            v.name.includes("Karen") ||
+            v.name.includes("Daniel") ||
+            v.name.includes("Google US English") ||
+            v.name.includes("Microsoft Aria"))
+      );
+      if (preferred) utterance.voice = preferred;
 
-      if (window.speechSynthesis.getVoices().length > 0) loadVoice();
-      else window.speechSynthesis.onvoiceschanged = loadVoice;
-
-      utterance.onstart = () => setIsSpeaking(true);
-      utterance.onend = () => {
-        setIsSpeaking(false);
+      let settled = false;
+      const done = () => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(guard);
         synthRef.current = null;
         resolve();
       };
+      // Chrome occasionally never fires onend; don't let that freeze the turn.
+      const guard = setTimeout(done, 4000 + text.length * 90);
+      utterance.onend = done;
       // Resolve (not reject) on error so a TTS failure never stalls the loop.
-      utterance.onerror = () => {
-        setIsSpeaking(false);
-        synthRef.current = null;
-        resolve();
-      };
+      utterance.onerror = done;
 
       synthRef.current = utterance;
       window.speechSynthesis.speak(utterance);
     });
+  }, []);
+
+  const speakText = useCallback(
+    async (text: string): Promise<void> => {
+      if (typeof window === "undefined" || !window.speechSynthesis) return;
+      const run = ++speechRunRef.current;
+      window.speechSynthesis.cancel();
+
+      // Clean first: never read symbol runs or markdown aloud. Then speak
+      // sentence by sentence so speech starts fast and can be skipped.
+      const chunks = splitIntoUtterances(cleanSpokenText(text));
+      if (window.speechSynthesis.getVoices().length === 0) {
+        // Voices load asynchronously on first use; give them a moment.
+        await new Promise((r) => setTimeout(r, 250));
+      }
+      setIsSpeaking(true);
+      try {
+        for (const chunk of chunks) {
+          if (speechRunRef.current !== run) break;
+          await speakChunk(chunk);
+        }
+      } finally {
+        if (speechRunRef.current === run) setIsSpeaking(false);
+      }
+    },
+    [speakChunk]
+  );
+
+  /** Stop the interviewer mid-sentence and go straight to answering. */
+  const skipSpeech = useCallback(() => {
+    speechRunRef.current += 1;
+    if (typeof window !== "undefined") window.speechSynthesis?.cancel();
+    setIsSpeaking(false);
   }, []);
 
   // ── Speech-to-text ──────────────────────────────────────────────────────────
@@ -220,6 +254,7 @@ const Agent = ({
         deliverySignals: signals ?? undefined,
         companyMode,
         jobDescription,
+        companyName,
         codeSubmission: getCodeContext?.() ?? undefined,
       });
       setIsProcessing(false);
@@ -285,6 +320,7 @@ const Agent = ({
       interviewType,
       companyMode,
       jobDescription,
+      companyName,
       getCodeContext,
       onActiveQuestionChange,
       router,
@@ -391,6 +427,7 @@ const Agent = ({
       : buildOpening({
           userName,
           role,
+          company: companyName,
           questionCount: questions.length,
           firstQuestion: questions[0] ?? "",
         });
@@ -413,7 +450,18 @@ const Agent = ({
       // is never stuck. The hook surfaces the reason in `speech.error`.
       if (!started) speech.beginTypedAnswer();
     }
-  }, [userName, role, questions, isCoding, speakText, startListening, speech]);
+  }, [userName, role, companyName, questions, isCoding, speakText, startListening, speech]);
+
+  // "Start interview now" from the create form lands here with autoStart set.
+  // Start once, then drop the flag from the URL so a refresh doesn't restart.
+  const autoStartedRef = useRef(false);
+  useEffect(() => {
+    if (!autoStart || autoStartedRef.current) return;
+    if (statusRef.current !== CallStatus.INACTIVE) return;
+    autoStartedRef.current = true;
+    window.history.replaceState(null, "", window.location.pathname);
+    handleStart();
+  }, [autoStart, handleStart]);
 
   const handleEnd = useCallback(() => {
     cancelListening();
@@ -445,6 +493,18 @@ const Agent = ({
 
   const displayText =
     lastMessage || (callStatus === CallStatus.CONNECTING ? "Connecting…" : "");
+
+  /** Lets the candidate cut the interviewer off and answer straight away. */
+  const skipButton = isSpeaking && (
+    <button
+      type="button"
+      onClick={skipSpeech}
+      className="skip-speech"
+      aria-label="Skip the rest and answer now"
+    >
+      Skip, answer now <span aria-hidden="true">→</span>
+    </button>
+  );
 
   /** The answer capture box: live transcript, editable, with explicit submit. */
   const answerPanel = isActive && !isSpeaking && !isProcessing && (
@@ -597,10 +657,11 @@ const Agent = ({
               {statusLabel}
             </p>
           </div>
+          {skipButton}
         </div>
 
         {displayText && (
-          <p className="max-h-28 overflow-y-auto rounded-lg bg-dark-300/50 p-3 text-sm leading-relaxed">
+          <p className="max-h-28 overflow-y-auto rounded-lg bg-dark-300/50 p-3 text-sm leading-relaxed [overflow-wrap:anywhere]">
             {displayText}
           </p>
         )}
@@ -631,6 +692,7 @@ const Agent = ({
           <p className="text-sm text-light-400 mt-1" aria-live="polite">
             {statusLabel}
           </p>
+          {skipButton}
         </div>
 
         {/* User card */}
