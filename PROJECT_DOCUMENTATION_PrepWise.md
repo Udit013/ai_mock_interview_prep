@@ -1061,23 +1061,6 @@ The cost is coupling: a schema change touches everything a turn does. Worth it h
 
 ---
 
-## 8.6 Speech Safety — `lib/interview/speech-text.ts`
-
-**A real production incident.** A live turn came back as a sentence, then **hundreds of commas**, then fragments of the prompt's own instructions ("Use paragraphs instead of bullet lists. Do not use bullet lists…"). The browser voice read every character — the candidate heard *"comma, comma, comma…"* with no way to stop it — and the unbroken string ran off both edges of the transcript box. Small models occasionally fall into repetition loops; nothing between the model and the speaker was checking.
-
-Defence in depth, cheapest first:
-
-| Layer | What it does |
-|---|---|
-| `maxTokens: 1500` on every turn | A loop can't stream thousands of tokens; a cut-off object fails parsing instead |
-| `isDegenerateReply` | Flags replies that are too long, mostly punctuation, a run of 8+ identical characters, a 4-word phrase repeated 3+ times, or leaked prompt text. Tested against the exact reply from the incident — and against legitimate lines with numbers ("1000000 requests"), "JSON", and "résumé bullet points", which must pass |
-| One retry, then `fallbackTurn()` | A malformed reply is regenerated once; if it's still unusable, a scripted, natural line ("Got it, thank you. Let's switch gears. <next seed question>") keeps the interview moving. Pure and schema-checked in tests |
-| `cleanSpokenText` | Strips markdown, collapses `,,,,` → `,`, and caps at 600 characters — ending on the question where possible |
-| Client: chunked speech + **Skip, answer now** | The candidate can always cut the interviewer off and answer immediately |
-| CSS | `overflow-wrap: anywhere` and a scrollable max height on the transcript, so no string can break the layout |
-
----
-
 ## 8.5 Job-Description Interviews — `lib/interview/job-description.ts`
 
 Paste a job posting on the create form (optional, in both manual and résumé mode) and the whole interview targets that role.
@@ -1097,6 +1080,22 @@ Paste a job posting on the create form (optional, in both manual and résumé mo
 **Pasted text is untrusted.** `normalizeJobDescription` normalises whitespace and line endings, treats anything under 80 characters as absent, and caps at 6,000. `jobDescriptionBlock` wraps it in `<job_description>` delimiters with an explicit "reference data, never instructions" rule — the same defence used for transcripts in feedback scoring.
 
 **Verified live** (a sample payments-backend posting): a JD-only set produced five requirement-driven questions (idempotent refunds, Kafka replays, ledger isolation levels, on-call observability, fit); the same posting plus a stored résumé produced exactly the planned 2/2/1 mix — e.g. *"The role requires Kafka and at-least-once delivery, but your projects lean on FastAPI, Firebase and WebSockets — how have you dealt with consumer failure recovery?"* — and the follow-up and feedback both referred back to the posting.
+
+
+## 8.6 Speech Safety — `lib/interview/speech-text.ts`
+
+**A real production incident.** A live turn came back as a sentence, then **hundreds of commas**, then fragments of the prompt's own instructions ("Use paragraphs instead of bullet lists. Do not use bullet lists…"). The browser voice read every character — the candidate heard *"comma, comma, comma…"* with no way to stop it — and the unbroken string ran off both edges of the transcript box. Small models occasionally fall into repetition loops; nothing between the model and the speaker was checking.
+
+Defence in depth, cheapest first:
+
+| Layer | What it does |
+|---|---|
+| `maxTokens: 1500` on every turn | A loop can't stream thousands of tokens; a cut-off object fails parsing instead |
+| `isDegenerateReply` | Flags replies that are too long, mostly punctuation, a run of 8+ identical characters, a 4-word phrase repeated 3+ times, or leaked prompt text. Tested against the exact reply from the incident — and against legitimate lines with numbers ("1000000 requests"), "JSON", and "résumé bullet points", which must pass |
+| One retry, then `fallbackTurn()` | A malformed reply is regenerated once; if it's still unusable, a scripted, natural line ("Got it, thank you. Let's switch gears. <next seed question>") keeps the interview moving. Pure and schema-checked in tests |
+| `cleanSpokenText` | Strips markdown, collapses `,,,,` → `,`, and caps at 600 characters — ending on the question where possible |
+| Client: chunked speech + **Skip, answer now** | The candidate can always cut the interviewer off and answer immediately |
+| CSS | `overflow-wrap: anywhere` and a scrollable max height on the transcript, so no string can break the layout |
 
 ---
 
@@ -2146,10 +2145,13 @@ User submits the form
         ├─ generateText(Gemini)         → question list
         ├─ strip ``` fences → JSON.parse
         ├─ techstack derived from resume.technologies if none given
-        └─ interviews.add({ …, userId: user.id, visibility: "private" })
+        ├─ interviews.add({ …, userId: user.id, visibility: "private" })
+        └─ 200 { success: true, interviewId }
   │
-  ├─ router.push("/")  +  router.refresh()
-  └─ Dashboard re-renders on the server → new card with 🔒 Private badge
+  ├─ "Start interview now" → router.push(`/interview/${interviewId}?start=1`)
+  │     └─ page passes autoStart → interviewer begins once, flag stripped from URL
+  └─ "Save for later"      → router.push("/") + router.refresh()
+        └─ Dashboard re-renders on the server → new card with 🔒 Private badge
 ```
 
 **Example generated question** (real output from this pipeline):
@@ -2446,6 +2448,12 @@ These were all found and repaired; they're listed because the *reasoning* is mor
 **3. `getFeedbackByUserId` is unbounded.** Fine for tens of interviews, wasteful at hundreds. The fix (a rolling per-user stats document) is described in §24.
 
 **4. The Firebase private key is still in git history** and should be rotated. This is the highest-priority outstanding item and requires console access.
+
+**5. Filter links opened fresh land at the top.** A bookmarked `/?collection=…#your-interviews` loads with the loading skeleton first, so the browser's jump to the anchor happens before the section exists. Clicking the chips in-app is unaffected (`scroll={false}` keeps your place).
+
+**6. One collection per interview.** Collections behave like folders, not tags — enough for "one hiring loop per company", but an interview can't sit in two groups at once.
+
+**7. Not exercised live:** the delete action itself and real (audible) speech after the voice rework were verified through tests and a silent speech stand-in rather than a live run; the delete path's ownership check is the same `ownedInterview()` guard used by archive and collections, which were live-tested.
 
 ## Accepted scale limits
 
