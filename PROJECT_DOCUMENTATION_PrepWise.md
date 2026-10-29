@@ -290,6 +290,7 @@ ai_mock_interview_prep/
 │   ├── NavLinks.tsx              # Header links with current-page state
 │   ├── ScoreRing.tsx             # Feedback score gauge (SVG, no deps)
 │   ├── InterviewAvatar.tsx       # Monogram of the company (or role) — replaces logos
+│   ├── InterviewCardMenu.tsx     # Owner menu: collection, archive, delete (native <dialog>)
 │   ├── InterviewCard.tsx         # Dashboard card
 │   ├── AuthForm.tsx              # Sign-in / sign-up (one component, two modes)
 │   ├── FormField.tsx             # Generic typed form field wrapper
@@ -328,6 +329,7 @@ ai_mock_interview_prep/
 │   │   ├── job-description.ts    # ★ Job-targeted interviews: cleaning, delimiting, question mix
 │   │   ├── speech-text.ts        # ★ Garbage-reply detection + text cleaning before speech
 │   │   ├── company.ts            # Company name cleaning, style matching, monograms
+│   │   ├── library.ts            # Collections, archive and dashboard filters
 │   │   └── turn-client.ts        # Browser call to /respond: timeout + outcomes
 │   ├── runner/code-runner.ts     # ★ Web Worker code sandbox
 │   ├── rate-limit.ts             # Transactional Firestore rate limiter
@@ -349,7 +351,7 @@ ai_mock_interview_prep/
 ├── hooks/
 │   └── useSpeechRecognition.ts   # ★ Robust browser speech-to-text
 │
-├── tests/                        # Vitest — 18 files, 201 tests
+├── tests/                        # Vitest — 19 files, 208 tests
 ├── public/                       # Static assets (avatars, icons — no brand logos)
 └── .github/workflows/ci.yml      # Typecheck + lint + tests on push/PR
 ```
@@ -586,6 +588,9 @@ Created at signup. The document ID **is** the Firebase Auth UID, which is what l
   jobDescription?: string,         // pasted posting (normalised, ≤6,000 chars) — see §8.5
   companyName?: string,            // employer the candidate entered ("Stripe"), normalised
   coverImage?: string,             // legacy only: random brand logos, no longer written or shown
+  collection?: string,             // owner's folder, e.g. "Stripe loop" (≤40 chars)
+  archived?: boolean,              // hidden from the dashboard's "All" and the public feed
+  deleted?: boolean,               // owner deleted it, but others' reports still need it
   createdAt: string,               // ISO timestamp
 }
 ```
@@ -1272,6 +1277,14 @@ Every function here is a public RPC endpoint, so every function authorizes itsel
 | `unshareFeedback(feedbackId)` | ✅ owner of the doc | Sets `shareToken: null` |
 | `createFeedback({…})` | ✅ session matches `userId` **and** owns the interview | Scores + persists |
 
+**Organising interviews** — all three go through `ownedInterview()`, which checks the session *and* ownership before touching anything (the id comes from the browser):
+
+| Action | Effect |
+|---|---|
+| `setInterviewCollection(id, name \| null)` | Puts the interview in one named collection (normalised, ≤40 chars), or removes it |
+| `setInterviewArchived(id, bool)` | Archive or restore. Archived interviews leave the dashboard's "All" view and the public feed, but keep their feedback and still count toward progress |
+| `deleteInterview(id)` | Deletes the owner's feedback for it (killing any share link) and the interview, in one batch. **If other users have taken this public interview,** the document is kept but marked `deleted` — hidden from its owner and the feed, and impossible to start again — so *their* reports keep working |
+
 ## `lib/data/interview.data.ts` — reads (not RPC-exposed)
 
 | Function | Purpose |
@@ -1363,6 +1376,8 @@ function computeStreak(isoDates: string[]): number {
 | *(any unknown URL)* | `app/not-found.tsx` | RSC | Public — branded 404 |
 
 **Loading and errors.** `app/(root)/loading.tsx` streams a skeleton (announced as "Loading…" to screen readers) the moment a signed-in page is requested, so navigation never looks frozen while Firestore is read. `app/error.tsx` catches render errors with a "Try again" button; `app/global-error.tsx` covers a failure in the root layout itself and therefore uses inline styles only.
+
+**Organising the dashboard.** Each of your cards has an options menu (⋯): add to or change a collection, archive or restore, and delete (with a confirmation dialog that focuses Cancel first). Above "Your Interviews", filter chips — **All · one per collection · Archived**, each with a count — are plain links (`?collection=…`, `?view=archived`), so the page stays a server component and any view can be bookmarked. Filtering rules live in `lib/interview/library.ts` and are unit-tested; collection names match case-insensitively.
 
 **Creating an interview.** The form offers **Start interview now** and **Save for later**. Both submit the same request; the button sets an intent ref. "Start now" navigates to `/interview/<id>?start=1`; the page passes `autoStart` to the interviewer, which begins once and immediately strips the flag from the URL with `history.replaceState`, so a refresh doesn't restart. Because this is a client-side navigation, the click's user activation carries over and the browser allows speech. Typing a company that has a built-in style (e.g. "Google") applies that style automatically.
 
@@ -2325,7 +2340,7 @@ This codebase does (b), because most readers are only ever called from server co
 
 # 21. Testing & CI
 
-**201 tests across 18 files.** All target deterministic logic — no rendering, and no real network (the two files that touch `fetch` use a fake).
+**208 tests across 19 files.** All target deterministic logic — no rendering, and no real network (the two files that touch `fetch` use a fake).
 
 | File | Covers |
 |---|---|
@@ -2347,6 +2362,7 @@ This codebase does (b), because most readers are only ever called from server co
 | `job-description.test.ts` | JD cleaning and caps, untrusted-data delimiting, overlap/gap/fit split for every size 1–15 |
 | `speech-text.test.ts` | The production comma-loop reply, punctuation runs, echoed instructions, false-positive guards, cleaning, sentence chunking |
 | `company.test.ts` | Company-name cleaning and caps, built-in style matching, monograms, stable colours |
+| `library.test.ts` | Collection-name cleaning, case-insensitive grouping and counts, URL view parsing, All / collection / Archived filtering (deleted never shown) |
 
 **The testing philosophy is explicit:** test what is deterministic. There are no tests asserting Gemini returns particular text — that would be flaky and would test the model rather than the code. Instead:
 

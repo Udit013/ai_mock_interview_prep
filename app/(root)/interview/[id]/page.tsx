@@ -30,7 +30,8 @@ const Page = async ({ params, searchParams }: RouteParams) => {
   ]);
 
   if (!user) redirect("/sign-in");
-  if (!interview) redirect("/");
+  // Deleted interviews can't be taken again (existing reports stay viewable).
+  if (!interview || interview.deleted) redirect("/");
   // Private interviews are owner-only — visibility must hold for direct URLs
   // too, not just the community feed.
   if (interview.visibility === "private" && interview.userId !== user.id) {

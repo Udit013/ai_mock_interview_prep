@@ -37,6 +37,7 @@ A full-stack, AI-powered interview platform that conducts **adaptive voice inter
 - Enter the role and, optionally, the **company** you're interviewing with — it shapes the questions and the interviewer ("on our team at Stripe"), and a company with a built-in style (Google, Amazon…) applies it automatically.
 - **Start interview now** opens it and begins straight away; **Save for later** keeps it on your dashboard.
 - Cards show a clean monogram of the company or role — no stock brand logos.
+- **Organise** from each card's ⋯ menu: group interviews into **collections** ("Stripe loop", "FAANG prep"), **archive** ones you're done with (restorable, feedback kept), or **delete** permanently. Filter the dashboard by collection or view the archive.
 
 ### Job-Description Interviews
 - Paste a **job posting** to target an interview at one specific role. On its own, questions come from the posting's responsibilities and must-have requirements.

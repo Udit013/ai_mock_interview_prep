@@ -110,6 +110,11 @@ interface Interview {
   jobDescription?: string;
   // Employer the candidate is interviewing with, if they entered one.
   companyName?: string;
+  // Owner's organisation: one named collection, and an archive flag.
+  collection?: string;
+  archived?: boolean;
+  // Deleted by its owner but kept because other users have reports on it.
+  deleted?: boolean;
 }
 
 // ── Phase 5: Progress Dashboard ───────────────────────────────────────────────
@@ -212,6 +217,12 @@ interface InterviewCardProps {
   feedback?: Feedback | null;
   visibility?: "public" | "private";
   companyName?: string;
+  // Present only on the owner's own cards: enables the options menu.
+  isOwner?: boolean;
+  archived?: boolean;
+  collection?: string;
+  /** The owner's existing collection names, offered when moving. */
+  collections?: string[];
 }
 
 interface CodeContextPayload {

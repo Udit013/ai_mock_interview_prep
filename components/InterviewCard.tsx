@@ -2,11 +2,12 @@ import dayjs from 'dayjs';
 import Image from "next/image";
 import {cn} from "@/lib/utils";
 import InterviewAvatar from "@/components/InterviewAvatar";
+import InterviewCardMenu from "@/components/InterviewCardMenu";
 import {Button} from "@/components/ui/button";
 import Link from "next/link";
 import DisplayTechIcons from "@/components/DisplayTechIcons";
 
-const InterviewCard = ({ interviewId, role, type, techstack, createdAt, feedback = null, visibility, companyName }: InterviewCardProps) => {
+const InterviewCard = ({ interviewId, role, type, techstack, createdAt, feedback = null, visibility, companyName, isOwner = false, archived = false, collection, collections }: InterviewCardProps) => {
     const normalizedType = /mix/gi.test(type) ? 'Mixed' : type;
     const formattedDate = dayjs(feedback?.createdAt || createdAt || Date.now()).format('MMM D, YYYY');
     const isPrivate = visibility === 'private';
@@ -21,19 +22,42 @@ const InterviewCard = ({ interviewId, role, type, techstack, createdAt, feedback
 
                   <InterviewAvatar company={companyName} role={role} />
 
-                  {visibility && (
-                      <span
-                          className={cn(
-                              "mt-3 inline-flex w-fit items-center gap-1 rounded-full px-3 py-1 text-xs font-medium",
-                              isPrivate
-                                  ? "bg-dark-300 text-light-400"
-                                  : "bg-success-100/20 text-success-100"
-                          )}
-                      >
-                          <span aria-hidden="true">{isPrivate ? "🔒" : "🌐"}</span>
-                          {isPrivate ? "Private" : "Public"}
-                      </span>
-                  )}
+                  <div className="mt-3 flex min-h-11 flex-wrap items-center gap-2">
+                      {visibility && (
+                          <span
+                              className={cn(
+                                  "inline-flex w-fit items-center gap-1 rounded-full px-3 py-1 text-xs font-medium",
+                                  isPrivate
+                                      ? "bg-dark-300 text-light-400"
+                                      : "bg-success-100/20 text-success-100"
+                              )}
+                          >
+                              <span aria-hidden="true">{isPrivate ? "🔒" : "🌐"}</span>
+                              {isPrivate ? "Private" : "Public"}
+                          </span>
+                      )}
+                      {collection && (
+                          <span className="inline-flex max-w-[12rem] items-center gap-1 truncate rounded-full border border-primary-200/25 bg-primary-200/10 px-3 py-1 text-xs font-medium text-primary-100">
+                              <span aria-hidden="true">▤</span>
+                              <span className="sr-only">Collection:</span>
+                              {collection}
+                          </span>
+                      )}
+                      {archived && (
+                          <span className="inline-flex items-center rounded-full bg-dark-300 px-3 py-1 text-xs font-medium text-light-400">
+                              Archived
+                          </span>
+                      )}
+                      {isOwner && interviewId && (
+                          <InterviewCardMenu
+                              interviewId={interviewId}
+                              role={role}
+                              archived={archived}
+                              collection={collection}
+                              collections={collections}
+                          />
+                      )}
+                  </div>
 
                   <h3 className="mt-5 capitalize">
                       {role} Interview

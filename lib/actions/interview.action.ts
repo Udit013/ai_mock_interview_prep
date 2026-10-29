@@ -17,6 +17,8 @@ import { MODEL_MAX_RETRIES, withModelFallback } from "@/lib/ai/models";
 import { feedbackSchema } from "@/constants";
 import { companyPromptBlock } from "@/constants/companies";
 import { normalizeCompanyName } from "@/lib/interview/company";
+import { normalizeCollectionName } from "@/lib/interview/library";
+import { FieldValue } from "firebase-admin/firestore";
 import {
   JD_TURN_CHARS,
   jobDescriptionBlock,
@@ -210,6 +212,90 @@ Be specific and constructive. Reference actual moments from the transcript when 
     return { success: true, feedbackId: feedbackRef.id };
   } catch (e) {
     console.error("createFeedback error:", e);
+    return { success: false };
+  }
+}
+
+/**
+ * Load an interview only if the signed-in user owns it. Every library action
+ * below goes through this — the id arrives from the browser and is untrusted.
+ */
+async function ownedInterview(interviewId: string) {
+  if (typeof interviewId !== "string" || !interviewId) return null;
+  const user = await getCurrentUser();
+  if (!user) return null;
+  const ref = db.collection("interviews").doc(interviewId);
+  const doc = await ref.get();
+  if (!doc.exists || doc.data()?.userId !== user.id || doc.data()?.deleted) {
+    return null;
+  }
+  return { user, ref };
+}
+
+/** Archive (hide from the dashboard and public feed) or restore an interview. */
+export async function setInterviewArchived(
+  interviewId: string,
+  archived: boolean
+): Promise<{ success: boolean }> {
+  try {
+    const owned = await ownedInterview(interviewId);
+    if (!owned) return { success: false };
+    await owned.ref.update({ archived: Boolean(archived) });
+    return { success: true };
+  } catch (e) {
+    console.error("setInterviewArchived error:", e);
+    return { success: false };
+  }
+}
+
+/** Move an interview into a named collection, or out of any (null). */
+export async function setInterviewCollection(
+  interviewId: string,
+  collection: string | null
+): Promise<{ success: boolean; collection?: string | null }> {
+  try {
+    const owned = await ownedInterview(interviewId);
+    if (!owned) return { success: false };
+    const name = normalizeCollectionName(collection);
+    await owned.ref.update({ collection: name ?? FieldValue.delete() });
+    return { success: true, collection: name };
+  } catch (e) {
+    console.error("setInterviewCollection error:", e);
+    return { success: false };
+  }
+}
+
+/**
+ * Permanently delete an interview and the owner's feedback for it (which also
+ * kills any share link). If other people have taken this public interview,
+ * their reports must keep working, so the interview document is only marked
+ * deleted — hidden from its owner and the public feed — instead of removed.
+ */
+export async function deleteInterview(
+  interviewId: string
+): Promise<{ success: boolean; keptForOthers?: boolean }> {
+  try {
+    const owned = await ownedInterview(interviewId);
+    if (!owned) return { success: false };
+
+    const feedback = await db
+      .collection("feedback")
+      .where("interviewId", "==", interviewId)
+      .get();
+    const mine = feedback.docs.filter((d) => d.data().userId === owned.user.id);
+    const othersTookIt = feedback.docs.length > mine.length;
+
+    const batch = db.batch();
+    for (const doc of mine) batch.delete(doc.ref);
+    if (othersTookIt) {
+      batch.update(owned.ref, { deleted: true, archived: true });
+    } else {
+      batch.delete(owned.ref);
+    }
+    await batch.commit();
+    return { success: true, keptForOthers: othersTookIt };
+  } catch (e) {
+    console.error("deleteInterview error:", e);
     return { success: false };
   }
 }

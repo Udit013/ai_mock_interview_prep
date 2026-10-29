@@ -12,11 +12,20 @@ import {
   getFeedbackByUserId,
 } from "@/lib/data/interview.data";
 import { computeProgress } from "@/lib/analytics/progress";
+import {
+  countArchived,
+  filterLibrary,
+  parseLibraryView,
+  summarizeCollections,
+} from "@/lib/interview/library";
 
 export const metadata: Metadata = { title: "Dashboard" };
 
-const Page = async () => {
+const Page = async ({ searchParams }: RouteParams) => {
   const user = await getCurrentUser();
+  // Library filter lives in the URL (?collection=… / ?view=archived) so views
+  // are linkable and the page stays a server component.
+  const view = parseLibraryView((await searchParams) ?? {});
 
   const [userInterviews, latestInterviews, userFeedback] = await Promise.all([
     getInterviewsByUserId(user?.id ?? ""),
@@ -33,6 +42,13 @@ const Page = async () => {
   const feedbackByInterview = new Map(
     userFeedback.map((f) => [f.interviewId, f])
   );
+
+  const collections = summarizeCollections(userInterviews);
+  const archivedCount = countArchived(userInterviews);
+  const visibleInterviews = filterLibrary(userInterviews, view);
+  const collectionNames = collections.map((c) => c.name);
+  const activeCount = filterLibrary(userInterviews, { kind: "all" }).length;
+  const showFilters = collections.length > 0 || archivedCount > 0;
 
   const hasUserInterviews = userInterviews.length > 0;
   const hasLatestInterviews = latestInterviews.length > 0;
@@ -71,11 +87,50 @@ const Page = async () => {
       )}
 
       <section className="flex flex-col gap-6">
-        <h2>Your Interviews</h2>
+        <h2 id="your-interviews">Your Interviews</h2>
+
+        {showFilters && (
+          <nav aria-label="Filter your interviews" className="-mt-2 flex flex-wrap gap-2">
+            <Link
+              href="/#your-interviews"
+              scroll={false}
+              className="collection-chip"
+              aria-current={view.kind === "all" ? "page" : undefined}
+            >
+              All <span className="chip-count">{activeCount}</span>
+            </Link>
+            {collections.map((c) => (
+              <Link
+                key={c.name}
+                href={`/?collection=${encodeURIComponent(c.name)}#your-interviews`}
+                scroll={false}
+                className="collection-chip"
+                aria-current={
+                  view.kind === "collection" &&
+                  view.name.toLowerCase() === c.name.toLowerCase()
+                    ? "page"
+                    : undefined
+                }
+              >
+                {c.name} <span className="chip-count">{c.count}</span>
+              </Link>
+            ))}
+            {archivedCount > 0 && (
+              <Link
+                href="/?view=archived#your-interviews"
+                scroll={false}
+                className="collection-chip"
+                aria-current={view.kind === "archived" ? "page" : undefined}
+              >
+                Archived <span className="chip-count">{archivedCount}</span>
+              </Link>
+            )}
+          </nav>
+        )}
 
         <div className="interviews-section">
-          {hasUserInterviews ? (
-            userInterviews.map((interview) => (
+          {visibleInterviews.length > 0 ? (
+            visibleInterviews.map((interview) => (
               <InterviewCard
                 key={interview.id}
                 userId={user?.id}
@@ -87,8 +142,29 @@ const Page = async () => {
                 companyName={interview.companyName}
                 feedback={feedbackByInterview.get(interview.id) ?? null}
                 visibility={interview.visibility ?? "public"}
+                isOwner
+                archived={interview.archived}
+                collection={interview.collection}
+                collections={collectionNames}
               />
             ))
+          ) : hasUserInterviews ? (
+            <div className="empty-state flex flex-col items-center gap-3">
+              <p>
+                {view.kind === "archived"
+                  ? "Nothing archived."
+                  : view.kind === "collection"
+                  ? `No active interviews in "${view.name}".`
+                  : "All your interviews are archived."}
+              </p>
+              <Link
+                href="/#your-interviews"
+                scroll={false}
+                className="text-primary-200 font-semibold underline-offset-4 hover:underline"
+              >
+                Show all interviews
+              </Link>
+            </div>
           ) : (
             <div className="empty-state flex flex-col items-center gap-4">
               <p>You haven&apos;t taken any interviews yet.</p>

@@ -42,6 +42,8 @@ export async function getLatestInterviews({
       // Privacy: never surface another user's private interviews (e.g. résumé
       // interviews). Older docs have no `visibility` field and stay public.
       .filter((i) => i.visibility !== "private")
+      // Archived or deleted by their owner: no longer offered to others.
+      .filter((i) => !i.archived && !i.deleted)
       .sort(
         (a, b) =>
           new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
@@ -65,6 +67,9 @@ export async function getInterviewsByUserId(
 
     return snapshot.docs
       .map((doc) => ({ id: doc.id, ...doc.data() }) as Interview)
+      // Deleted-but-kept-for-others interviews are gone as far as the owner
+      // is concerned.
+      .filter((i) => !i.deleted)
       .sort(
         (a, b) =>
           new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
