@@ -2542,6 +2542,7 @@ The dashboard's own route bundle grew from 173 B to 4.14 kB with the redesign: t
 | Share → open signed out → revoke | Report readable signed out with `noindex`; old-domain link redirected; private replay still required sign-in; after revoking, the link showed "Report not found" and no data |
 | Delete (cleanup) | Interview, feedback and share token removed; other interviews untouched |
 | Résumé Coach | Suggestions in 6.5 s, no errors |
+| Google sign-in (existing password account, email verified first) | Signed in with Google; the account now lists `google.com` **and** `password`, same uid, profile untouched, all interviews and feedback still attached |
 | Themes, mobile, accessibility | Light/dark toggle persists across reloads; no horizontal overflow at 375 px; no unlabeled controls, unnamed buttons or images without alt; text contrast ≥ 4.5:1 in both themes on the dashboard, Résumé Coach, new-interview and feedback pages |
 
 Not covered: spoken audio (speech synthesis and the microphone can't be exercised in the automated browser) and a non-coding interview type (same adaptive engine and route).
