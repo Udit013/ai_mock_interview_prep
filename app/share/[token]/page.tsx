@@ -13,7 +13,8 @@ export const metadata: Metadata = {
 };
 
 // Public, read-only candidate report. Reachable only via an unguessable
-// owner-minted token; revoking the token 404s this page.
+// owner-minted token. An unknown or revoked token renders a "not found"
+// message with no report data (HTTP 200; the page is noindex either way).
 const Page = async ({ params }: RouteParams) => {
   const { token } = await params;
   const shared = await getFeedbackByShareToken(token);

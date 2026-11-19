@@ -65,6 +65,7 @@ A full-stack, AI-powered interview platform that conducts **adaptive voice inter
 - Firebase Auth with email/password, server-side session cookies, and protected routes.
 - **All AI endpoints require a valid session** — identity is derived server-side from the session cookie, never from the request body — and every request body is **size-capped before parsing and Zod-validated with field bounds** (oversized bodies get 413).
 - **Per-user daily rate limits** on Gemini-backed endpoints (question generation, interview turns, feedback reports, résumé parsing) via a transactional Firestore counter — serverless-safe, no external services. Every model call also has a hard timeout so a stalled request fails cleanly.
+- **Security status:** no critical advisories; remaining high-severity advisories are not reachable as used and are scheduled in a phased upgrade plan (see the technical documentation, §20).
 - **Owner-only access to private interviews**, enforced on direct URLs as well as the community feed; résumé uploads capped at 5 MB.
 - **Unit tests (Vitest) + GitHub Actions CI** (231 tests) covering the deterministic core: speaking analytics, the adaptive engine's termination cap, schema and state bounds, non-answer detection, the interview request timeout/retry logic, and the résumé guard. CI runs typecheck, lint and tests.
 

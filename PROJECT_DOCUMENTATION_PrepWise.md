@@ -2306,7 +2306,7 @@ Recipient (not logged in) opens /share/<token>
         └─ renders scores ONLY — no transcript, no code, no name
   │
 Owner clicks "Revoke link"
-  └─ unshareFeedback → shareToken: null → link now 404s gracefully
+  └─ unshareFeedback → shareToken: null → link now shows "Report not found" with no report data
 ```
 
 ---
@@ -2342,7 +2342,7 @@ Every Gemini-backed endpoint runs the same sequence, in this order:
 | Raw error messages returned from the generate route | Upstream provider errors can carry project ids and quota details | Logged server-side; a generic message is returned |
 | No request size limits | Hostile payloads could inflate prompts and drain quota | Zod bounds on every field |
 | No rate limits | One user could exhaust the daily API budget | Transactional per-user daily counters |
-| `.env.local` tracked in git | Secrets in history | Untracked + gitignored (**key still needs rotation**) |
+| `.env.local` tracked in git | Secrets in history | Untracked + gitignored. The values remain in public history, so each one must be rotated — status below |
 | `signUp` trusted a caller-supplied uid/email, and the client sent the plaintext password | Anyone could create a profile document for an arbitrary uid; the password crossed to our server needlessly | Server derives uid/email from a verified ID token; only the token is sent |
 | `createFeedback` (a Gemini call) had **no rate limit** | A signed-in user could call the action in a loop and drain the model quota | `feedback` limit of 30/day, checked after authorization |
 | `interviewState` arrays/strings were **unbounded** | Every turn re-sends the state, so a client could grow each prompt without limit | Rejected if absurd, trimmed to 20 × 300 chars otherwise |
@@ -2375,7 +2375,30 @@ Moderates: the Admin SDK's Google Cloud chain (`uuid` buffer check — PrepWise 
 
 **Fixed without majors:** `typescript-eslint` 8.73, `minimatch`, `fast-xml-parser` 5.12. `npm audit fix` was tried first and **rejected** — it downgraded `monaco-editor` 0.57 → 0.55 and `dompurify` 3.4 → 3.2 (raising the XSS rating), so the safe updates were applied individually.
 
-**Recommended next:** the AI SDK major (`ai` 4 → 5+, `@ai-sdk/google` → 2+, `zod` 4) as one planned migration with its own testing pass.
+## Incremental upgrade plan
+
+Ordered by security value per unit of risk. Each phase is its own branch and pull request, shipped only after typecheck, lint, the full test suite, a production build, and a live smoke test (create interview → adaptive turns → code run → feedback → share/revoke → delete).
+
+| Phase | Change | Clears | Breaking surface in PrepWise | Status |
+|---|---|---|---|---|
+| 0 | Body guard before Zod; patch-level updates | The one production-reachable path (Zod arrays); 3 dev/low advisories | None | **Done** |
+| 1 | `ai` 4 → **5.0.x**, `@ai-sdk/google` 1 → **2.0.x** (keeps `zod` 3.25, which `ai` 5 still supports) | 6 highs: `ai`, `@ai-sdk/provider-utils`, `@ai-sdk/google`, `@ai-sdk/react`, `@ai-sdk/ui-utils`, `jsondiffpatch` | `lib/ai/*` and three routes: `maxTokens` → `maxOutputTokens`, usage field names, message types. Error classes (`APICallError`, `RetryError`) still exist, so `lib/ai/errors.ts` tests carry over | Planned |
+| 2 | `zod` 3 → 4 | `zod` high (already mitigated) | ~20 schemas; `.describe()`/`.transform()` usages; error-format changes in `safeParse` callers | Planned, after phase 1 |
+| 3 | `firebase-admin` 13 → 14 | Moderate chain (`uuid`, `google-gax`, `teeny-request`, `retry-request`) | Admin init in `firebase/admin.ts`; Node version on Vercel | Planned |
+| 4 | `next` 15 → 16 | `postcss` (build-time) | Largest: framework major. Lowest value, so last | Deferred |
+| — | `firebase` client / `@grpc/grpc-js` 1.9 | — | Not fixable by upgrading (firebase 12 still pins grpc-js 1.9) and not reachable (Firestore client never imported) | Accepted |
+
+## Secret exposure & rotation status
+
+Commit `1173c62` (September 2025) added `.env.local` to this **public** repository. It was removed from the tree later, but its values remain in history. Assessed November 2026 by comparing hashes, never values:
+
+| Secret | Still in use? | Action |
+|---|---|---|
+| `FIREBASE_PRIVATE_KEY` (service account `firebase-adminsdk-fbsvc@…`) | **Yes** — local and Vercel production both use the leaked key | Rotate: create a new key, install locally and on Vercel, verify, then disable and delete the old key |
+| `GOOGLE_GENERATIVE_AI_API_KEY` | No — local and production use a newer key | Delete the old key in Google AI Studio if it still exists |
+| `NEXT_PUBLIC_VAPI_WEB_TOKEN` | No — Vapi is no longer used | Revoke in the Vapi dashboard |
+
+Rewriting git history is **not** needed once each value is revoked: a revoked credential in history grants nothing, while a force-push rewrite would break every existing clone and fork.
 
 ## Why `lib/data/` is a security control, not a style choice
 
@@ -2478,6 +2501,21 @@ git push origin main
 
 The dashboard's own route bundle grew from 173 B to 4.14 kB with the redesign: the interview-card menus and dashboard filters are client components. The progress charts are still server-rendered SVG and ship as HTML. The favicon set, `robots.txt`, sitemap and social card are all static (`○`).
 
+**Production verification (19 November 2026, prepwise-studio.vercel.app):** run in a real browser against the live deployment with clearly labelled temporary data (`QA TEMP Backend Engineer`, private), which was deleted afterwards and confirmed gone in Firestore.
+
+| Journey | Result |
+|---|---|
+| Create interview (Coding, 3 questions, "Start now") | Generated and opened the interview |
+| Adaptive turns (typed answers; the pane blocks the microphone) | Replies in ~2 s each; moved through problems 1 → 2 → 3; follow-up asked about the submitted code |
+| Code execution | JavaScript ran and printed the correct result; an infinite loop was stopped at 5 s with a clear message while the page stayed responsive |
+| Interview end + feedback | The interviewer ended the interview by itself after problem 3; scored report (88/100, per-category) in ~4 s |
+| Share → open signed out → revoke | Report readable signed out with `noindex`; old-domain link redirected; private replay still required sign-in; after revoking, the link showed "Report not found" and no data |
+| Delete (cleanup) | Interview, feedback and share token removed; other interviews untouched |
+| Résumé Coach | Suggestions in 6.5 s, no errors |
+| Themes, mobile, accessibility | Light/dark toggle persists across reloads; no horizontal overflow at 375 px; no unlabeled controls, unnamed buttons or images without alt; text contrast ≥ 4.5:1 in both themes on the dashboard, Résumé Coach, new-interview and feedback pages |
+
+Not covered: spoken audio (speech synthesis and the microphone can't be exercised in the automated browser) and a non-coding interview type (same adaptive engine and route).
+
 **A real deployment failure worth knowing:** builds once compiled successfully but Vercel **blocked the deployment** because Next.js 15.2.3 had a critical RSC vulnerability. The fix was upgrading to 15.2.9 — a reminder that a green build is not the same as a shippable artifact. A later audit found 15.2.9 itself had since picked up a critical advisory (image-optimizer RCE, fixed in 15.5.24) plus several high-severity Server Action/RSC DoS issues, so the project moved to 15.5.27, the latest 15.x.
 
 ---
@@ -2510,7 +2548,7 @@ These were all found and repaired; they're listed because the *reasoning* is mor
 
 **3. `getFeedbackByUserId` is unbounded.** Fine for tens of interviews, wasteful at hundreds. The fix (a rolling per-user stats document) is described in §24.
 
-**4. The Firebase private key is still in git history** and should be rotated. This is the highest-priority outstanding item and requires console access.
+**4. Leaked credentials in git history** (see §20, *Secret exposure & rotation status*). The Firebase Admin key is still the leaked one and must be rotated by the project owner in the Google Cloud console; the old Gemini key and Vapi token should be revoked. This is the highest-priority outstanding item.
 
 **5. Filter links opened fresh land at the top.** A bookmarked `/?collection=…#your-interviews` loads with the loading skeleton first, so the browser's jump to the anchor happens before the section exists. Clicking the chips in-app is unaffected (`scroll={false}` keeps your place).
 
