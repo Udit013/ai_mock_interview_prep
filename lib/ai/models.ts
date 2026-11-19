@@ -21,6 +21,12 @@
  */
 
 import { google } from "@ai-sdk/google";
+import {
+  backoffDelay,
+  classifyAiError,
+  isFailoverable,
+  isTransient,
+} from "@/lib/ai/errors";
 
 export const DEFAULT_MODELS: {
   primary: string;
@@ -59,54 +65,90 @@ export function modelChain(task: ModelTask, env: Env = process.env): string[] {
 }
 
 /**
- * True when trying another model could help: quota/rate exhaustion (429) or a
- * model id that no longer exists (404). Timeouts and bad requests are not
- * retried on another model — they'd fail the same way.
+ * True when trying another model could help: the model is overloaded or
+ * erroring (5xx), out of quota (429), or retired (404). Timeouts and bad
+ * requests are not — they'd fail the same way on the next model.
  */
 export function shouldTryNextModel(error: unknown): boolean {
-  const candidates: unknown[] = [error];
-  // The AI SDK wraps the final provider error in a RetryError.
-  const last = (error as { lastError?: unknown })?.lastError;
-  if (last) candidates.push(last);
-
-  return candidates.some((e) => {
-    const status = (e as { statusCode?: number })?.statusCode;
-    if (status === 429 || status === 404) return true;
-    const message = String((e as { message?: string })?.message ?? "");
-    return /RESOURCE_EXHAUSTED|quota|rate limit|not found for API version|is not found/i.test(
-      message
-    );
-  });
+  return isFailoverable(classifyAiError(error));
 }
 
+/** Retries on one model for a transient overload before moving on. */
+export const TRANSIENT_RETRIES_PER_MODEL = 2;
+
 /**
- * Run `call` with each model in the task's chain until one succeeds.
- * Non-quota errors are rethrown immediately.
+ * Total time the whole chain may spend, including backoff waits. Kept under
+ * the routes' 60 s `maxDuration` so our own error handling always runs.
+ */
+export const FALLBACK_BUDGET_MS = 40_000;
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/**
+ * Run `call` against each model in the task's chain until one succeeds.
+ *
+ *  - Overloaded (503 "high demand") → back off with jitter and retry the same
+ *    model up to TRANSIENT_RETRIES_PER_MODEL times, then fail over.
+ *  - Quota (429) or retired (404) → fail over immediately.
+ *  - Timeouts, bad output, bad requests → rethrow; the caller decides.
+ *
+ * Bounded: never more than (retries + 1) × models attempts, and never past
+ * the time budget — so an outage costs a few seconds, not a stuck request.
  */
 export async function withModelFallback<T>(
   task: ModelTask,
   call: (model: ReturnType<typeof google>, modelId: string) => Promise<T>,
-  { chain = modelChain(task), createModel = google } = {} as {
+  {
+    chain = modelChain(task),
+    createModel = google,
+    budgetMs = FALLBACK_BUDGET_MS,
+    retriesPerModel = TRANSIENT_RETRIES_PER_MODEL,
+    wait = sleep,
+    random = Math.random,
+    now = Date.now,
+  } = {} as {
     chain?: string[];
     createModel?: (id: string) => ReturnType<typeof google>;
+    budgetMs?: number;
+    retriesPerModel?: number;
+    wait?: (ms: number) => Promise<unknown>;
+    random?: () => number;
+    now?: () => number;
   }
 ): Promise<T> {
+  const deadline = now() + budgetMs;
   let lastError: unknown = new Error("No Gemini model configured.");
+
   for (const [i, id] of chain.entries()) {
-    try {
-      return await call(createModel(id), id);
-    } catch (error) {
-      lastError = error;
-      const hasNext = i < chain.length - 1;
-      if (!hasNext || !shouldTryNextModel(error)) throw error;
-      console.warn(`Gemini model "${id}" unavailable (quota/retired); trying "${chain[i + 1]}".`);
+    for (let attempt = 0; ; attempt++) {
+      try {
+        return await call(createModel(id), id);
+      } catch (error) {
+        lastError = error;
+        const kind = classifyAiError(error);
+        if (!isFailoverable(kind)) throw error;
+
+        if (isTransient(kind) && attempt < retriesPerModel) {
+          const delay = backoffDelay(attempt, { random });
+          if (now() + delay < deadline) {
+            console.warn(`Gemini "${id}" busy (attempt ${attempt + 1}); retrying in ${delay} ms.`);
+            await wait(delay);
+            continue;
+          }
+        }
+        break; // give up on this model
+      }
     }
+    const next = chain[i + 1];
+    if (!next || now() >= deadline) break;
+    console.warn(`Gemini "${id}" unavailable (${classifyAiError(lastError)}); failing over to "${next}".`);
   }
   throw lastError;
 }
 
 /**
- * SDK retries per model. One retry absorbs a brief per-minute spike; more is
- * wasted time when the daily quota is gone, since the next model takes over.
+ * SDK-level retries per call. Zero: the loop above owns retrying, with
+ * backoff and failover — SDK retries on top would multiply attempts against
+ * a model that is already overloaded.
  */
-export const MODEL_MAX_RETRIES = 1;
+export const MODEL_MAX_RETRIES = 0;

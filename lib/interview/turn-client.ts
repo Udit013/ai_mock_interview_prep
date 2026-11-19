@@ -21,7 +21,9 @@ export type TurnResult =
   | { kind: "rate_limited" }
   | { kind: "unauthorized" }
   /** Retryable: the answer was not processed and can be sent again. */
-  | { kind: "failed"; reason: "timeout" | "network" | "server" };
+  | { kind: "failed"; reason: TurnFailureReason };
+
+export type TurnFailureReason = "timeout" | "network" | "server" | "busy";
 
 export async function postInterviewTurn(
   body: unknown,
@@ -47,6 +49,8 @@ export async function postInterviewTurn(
 
     if (res.status === 429) return { kind: "rate_limited" };
     if (res.status === 401) return { kind: "unauthorized" };
+    // 503: the AI service is overloaded or out of quota — temporary.
+    if (res.status === 503) return { kind: "failed", reason: "busy" };
     if (!res.ok) return { kind: "failed", reason: "server" };
 
     const data = (await res.json()) as Partial<TurnResponse> | null;
@@ -63,14 +67,14 @@ export async function postInterviewTurn(
 }
 
 /** What to tell the candidate when a turn can be retried. */
-export function describeTurnFailure(
-  reason: "timeout" | "network" | "server"
-): string {
+export function describeTurnFailure(reason: TurnFailureReason): string {
   switch (reason) {
     case "timeout":
       return "The interviewer is taking too long to respond. Your answer is still in the box — press Send to try again.";
     case "network":
       return "Couldn't reach the interviewer. Check your connection — your answer is still in the box, press Send to retry.";
+    case "busy":
+      return "The AI interviewer is busy right now. Your answer is still in the box — wait a few seconds, then press Send.";
     case "server":
       return "The interviewer hit a problem. Your answer is still in the box — press Send to try again.";
   }

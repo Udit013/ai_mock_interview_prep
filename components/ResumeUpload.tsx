@@ -43,7 +43,17 @@ const ResumeUpload = ({
       toast.success("Résumé uploaded and parsed.");
       router.refresh();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Failed to read résumé.");
+      // Server errors are already user-safe; a thrown TypeError means the
+      // request never reached us.
+      const message =
+        e instanceof TypeError
+          ? "Couldn't reach PrepWise. Check your connection and try again."
+          : e instanceof Error
+          ? e.message
+          : "Couldn't read your résumé. Please try again.";
+      toast.error(message, {
+        action: { label: "Try again", onClick: () => void handleFile(file) },
+      });
     } finally {
       setUploading(false);
       if (inputRef.current) inputRef.current.value = "";

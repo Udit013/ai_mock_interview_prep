@@ -17,6 +17,7 @@ import { MODEL_MAX_RETRIES, withModelFallback } from "@/lib/ai/models";
 import { feedbackSchema } from "@/constants";
 import { companyPromptBlock } from "@/constants/companies";
 import { normalizeCompanyName } from "@/lib/interview/company";
+import { classifyAiError, userMessageFor } from "@/lib/ai/errors";
 import { normalizeCollectionName } from "@/lib/interview/library";
 import { FieldValue } from "firebase-admin/firestore";
 import {
@@ -82,7 +83,9 @@ export async function createFeedback({
 }: CreateFeedbackParams): Promise<{
   success: boolean;
   feedbackId?: string;
-  error?: "rate_limited";
+  error?: "rate_limited" | "ai_unavailable";
+  /** User-safe explanation when the AI step failed; the client can retry. */
+  message?: string;
 }> {
   try {
     // Never trust the caller-supplied userId: server actions are public
@@ -212,6 +215,15 @@ Be specific and constructive. Reference actual moments from the transcript when 
     return { success: true, feedbackId: feedbackRef.id };
   } catch (e) {
     console.error("createFeedback error:", e);
+    // AI busy/quota/timeout: tell the client it's worth retrying, so the
+    // candidate's transcript isn't thrown away.
+    if (classifyAiError(e) !== "unknown") {
+      return {
+        success: false,
+        error: "ai_unavailable",
+        message: userMessageFor(e, "Feedback"),
+      };
+    }
     return { success: false };
   }
 }

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { classifyAiError, userMessageFor } from "@/lib/ai/errors";
 import {
   runAdaptiveTurn,
   maxExchangesFor,
@@ -184,9 +185,12 @@ export async function POST(request: Request) {
     });
   } catch (error) {
     console.error("Interview respond error:", error);
+    // Busy/quota/timeout → 503 so the client offers "try again" and keeps the
+    // answer; 429 is reserved for our own daily limit (which ends the session).
+    const kind = classifyAiError(error);
     return Response.json(
-      { success: false, error: "Failed to generate response" },
-      { status: 500 }
+      { success: false, error: userMessageFor(error, "The interviewer") },
+      { status: kind === "unknown" ? 500 : 503 }
     );
   }
 }

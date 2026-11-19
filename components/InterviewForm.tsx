@@ -105,7 +105,14 @@ const InterviewForm = () => {
       toast.success("Resume parsed! Review the details below, then generate.");
     } catch (e) {
       setResumeFileName("");
-      toast.error(e instanceof Error ? e.message : "Failed to read resume.");
+      toast.error(
+        e instanceof TypeError
+          ? "Couldn't reach PrepWise. Check your connection and try again."
+          : e instanceof Error
+          ? e.message
+          : "Couldn't read your résumé. Please try again.",
+        { action: { label: "Try again", onClick: () => void handleResumeUpload(file) } }
+      );
     } finally {
       setParsing(false);
     }
@@ -169,9 +176,17 @@ const InterviewForm = () => {
       router.refresh();
     } catch (e) {
       toast.error(
-        e instanceof Error
+        e instanceof TypeError
+          ? "Couldn't reach PrepWise. Check your connection and try again."
+          : e instanceof Error
           ? e.message
-          : "Couldn't create the interview. Please try again."
+          : "Couldn't create the interview. Please try again.",
+        {
+          action: {
+            label: "Try again",
+            onClick: () => void form.handleSubmit(onSubmit)(),
+          },
+        }
       );
     } finally {
       setLoading(false);

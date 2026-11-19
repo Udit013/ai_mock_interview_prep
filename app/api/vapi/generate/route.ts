@@ -1,4 +1,5 @@
 import { generateText } from "ai";
+import { classifyAiError, userMessageFor } from "@/lib/ai/errors";
 import { aiAbortSignal } from "@/lib/ai/limits";
 import { MODEL_MAX_RETRIES, withModelFallback } from "@/lib/ai/models";
 import { z } from "zod";
@@ -299,11 +300,13 @@ ${outputRules}`;
     // upstream provider errors can carry project ids and quota details.
     console.error("generate interview error:", error);
 
-    const message =
-      error instanceof QuestionGenerationError
-        ? error.message
-        : "Couldn't generate the interview right now. Please try again in a moment.";
-
-    return Response.json({ success: false, error: message }, { status: 500 });
+    if (error instanceof QuestionGenerationError) {
+      return Response.json({ success: false, error: error.message }, { status: 500 });
+    }
+    const kind = classifyAiError(error);
+    return Response.json(
+      { success: false, error: userMessageFor(error, "Creating your interview") },
+      { status: kind === "unknown" ? 500 : 503 }
+    );
   }
 }

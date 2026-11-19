@@ -15,7 +15,9 @@ const ResumeCoach = () => {
     try {
       const res = await suggestResumeImprovements();
       if (!res.success) {
-        toast.error(res.error);
+        toast.error(res.error, {
+          action: { label: "Try again", onClick: () => void run() },
+        });
         return;
       }
       setResult(res.improvements);

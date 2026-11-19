@@ -1,4 +1,5 @@
 import { extractText, getDocumentProxy } from "unpdf";
+import { classifyAiError, userMessageFor } from "@/lib/ai/errors";
 import { structureResume, ResumeTooShortError } from "@/lib/ai/resume";
 import { saveResume } from "@/lib/data/resume.data";
 import { getCurrentUser } from "@/lib/actions/auth.action";
@@ -81,8 +82,17 @@ export async function POST(request: Request) {
       );
     }
 
-    const message =
-      error instanceof Error ? error.message : "Failed to parse resume.";
-    return Response.json({ success: false, error: message }, { status: 500 });
+    // Never echo provider errors ("Failed after 2 attempts. This model is
+    // currently experiencing high demand…") — map them to a clear message.
+    // 503, not 429: the client reserves 429 for our own daily limit.
+    const kind = classifyAiError(error);
+    return Response.json(
+      {
+        success: false,
+        error: userMessageFor(error, "Reading your résumé"),
+        retryable: kind !== "unknown",
+      },
+      { status: kind === "unknown" ? 500 : 503 }
+    );
   }
 }

@@ -360,45 +360,85 @@ const Agent = ({
   }, [getCodeContext, cancelListening]);
 
   // ── Finish: generate feedback and redirect ──────────────────────────────────
+  // Feedback is the last AI call of the interview. If the service is busy we
+  // keep the transcript in memory and offer a retry, rather than redirecting
+  // and losing the whole interview.
+  const [feedbackState, setFeedbackState] = useState<
+    "idle" | "generating" | "failed"
+  >("idle");
+  const [feedbackError, setFeedbackError] = useState("");
+  const [feedbackRetryable, setFeedbackRetryable] = useState(true);
+
+  const generateFeedback = useCallback(async () => {
+    setFeedbackState("generating");
+    cancelListening();
+    const speakingAnalytics = analyzeSpeaking(
+      spokenTurnsRef.current,
+      answerDurationsRef.current
+    );
+
+    // A thrown server action (network drop, function timeout) is treated
+    // like a busy service: retryable, transcript kept.
+    const result = await createFeedback({
+      interviewId: interviewId!,
+      userId: userId!,
+      transcript: messagesRef.current,
+      feedbackId,
+      speakingAnalytics,
+      finalCode: getCodeContext?.() ?? undefined,
+    }).catch(() => null);
+
+    if (result?.success && result.feedbackId) {
+      router.push(`/interview/${interviewId}/feedback`);
+      return;
+    }
+    const limited = result?.error === "rate_limited";
+    setFeedbackRetryable(!limited);
+    setFeedbackError(
+      limited
+        ? "You've reached today's feedback limit. Your answers can't be scored until tomorrow."
+        : result?.message ??
+            "We couldn't reach the AI to score your interview. Your answers are still here — try again."
+    );
+    setFeedbackState("failed");
+  }, [cancelListening, feedbackId, getCodeContext, interviewId, router, userId]);
+
   useEffect(() => {
     if (callStatus !== CallStatus.FINISHED) return;
     if (type === "generate") {
       router.push("/");
       return;
     }
-
-    const finish = async () => {
-      cancelListening();
-      const speakingAnalytics = analyzeSpeaking(
-        spokenTurnsRef.current,
-        answerDurationsRef.current
-      );
-
-      // A thrown server action (network drop, function timeout) must not
-      // strand the candidate on a finished interview screen.
-      const result = await createFeedback({
-        interviewId: interviewId!,
-        userId: userId!,
-        transcript: messagesRef.current,
-        feedbackId,
-        speakingAnalytics,
-        finalCode: getCodeContext?.() ?? undefined,
-      }).catch(() => null);
-
-      if (result?.success && result.feedbackId) {
-        router.push(`/interview/${interviewId}/feedback`);
-      } else {
-        toast.error(
-          result?.error === "rate_limited"
-            ? "You've reached today's feedback limit. Try again tomorrow."
-            : "Couldn't save your feedback. Returning to the dashboard."
-        );
-        router.push("/");
-      }
-    };
-
-    finish();
+    generateFeedback();
   }, [callStatus]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  /** Shown after the interview ends: progress, or a recoverable failure. */
+  const feedbackPanel =
+    feedbackState === "generating" ? (
+      <p role="status" className="feedback-status">
+        <span className="spinner" aria-hidden="true" />
+        Scoring your interview — this usually takes 5–15 seconds…
+      </p>
+    ) : feedbackState === "failed" ? (
+      <div role="alert" className="feedback-failed">
+        <p className="font-semibold text-foreground">Feedback couldn&apos;t be generated</p>
+        <p className="text-sm text-light-400">{feedbackError}</p>
+        <div className="flex flex-wrap gap-3">
+          {feedbackRetryable && (
+            <button type="button" className="btn-primary" onClick={generateFeedback}>
+              Try again
+            </button>
+          )}
+          <button
+            type="button"
+            className="btn-secondary"
+            onClick={() => router.push("/")}
+          >
+            Leave without feedback
+          </button>
+        </div>
+      </div>
+    ) : null;
 
   // Release the microphone and stop speech if the component unmounts mid-
   // interview (e.g. the user navigates away).
@@ -668,7 +708,7 @@ const Agent = ({
 
         {answerPanel}
 
-        <div className="flex justify-center">{controlButton}</div>
+        <div className="flex justify-center">{feedbackPanel ?? controlButton}</div>
       </div>
     );
   }
@@ -727,7 +767,7 @@ const Agent = ({
 
       {answerPanel && <div className="w-full max-w-3xl mx-auto">{answerPanel}</div>}
 
-      <div className="w-full flex justify-center">{controlButton}</div>
+      <div className="w-full flex justify-center">{feedbackPanel ?? controlButton}</div>
     </>
   );
 };

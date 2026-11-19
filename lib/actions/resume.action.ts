@@ -6,6 +6,7 @@
  * they cannot be invoked directly by a caller supplying someone else's id.
  */
 
+import { userMessageFor } from "@/lib/ai/errors";
 import {
   generateResumeImprovements,
   type ResumeImprovements,
@@ -58,6 +59,6 @@ export async function suggestResumeImprovements(): Promise<
     return { success: true, improvements };
   } catch (e) {
     console.error("suggestResumeImprovements error:", e);
-    return { success: false, error: "Failed to generate suggestions." };
+    return { success: false, error: userMessageFor(e, "Résumé coaching") };
   }
 }
