@@ -3,6 +3,7 @@
 import {db, auth} from "@/firebase/admin";
 import {cookies} from "next/headers";
 import {getSessionUser} from "@/lib/auth/session";
+import {profileFromClaims} from "@/lib/auth/profile";
 
 const ONE_WEEK = 60 * 60 * 24 * 7;
 
@@ -78,6 +79,39 @@ export async function signIn(params: SignInParams) {
             success: false,
             message: 'Failed to log into an account.'
         }
+    }
+}
+
+/**
+ * "Continue with Google" — signs in, creating the PrepWise profile on first use.
+ *
+ * Everything is derived from the verified ID token (uid, email, name, and that
+ * the sign-in really came from Google), never from caller-supplied fields.
+ * One call covers both sign-up and sign-in, as users expect from this button.
+ */
+export async function signInWithGoogle(params: { idToken: string }) {
+    try {
+        const decoded = await auth.verifyIdToken(params.idToken);
+        const profile = profileFromClaims(decoded);
+        if (!profile) {
+            return { success: false, message: 'Google sign-in failed. Please try again.' };
+        }
+
+        // create() fails if the document exists, so a returning user's profile
+        // (including a name they set at sign-up) is never overwritten.
+        let isNewUser = true;
+        try {
+            await db.collection('users').doc(decoded.uid).create(profile);
+        } catch (e) {
+            if ((e as { code?: number })?.code !== 6 /* ALREADY_EXISTS */) throw e;
+            isNewUser = false;
+        }
+
+        await setSessionCookie(params.idToken);
+        return { success: true, isNewUser };
+    } catch (e) {
+        console.error('Google sign-in failed', e);
+        return { success: false, message: 'Google sign-in failed. Please try again.' };
     }
 }
 

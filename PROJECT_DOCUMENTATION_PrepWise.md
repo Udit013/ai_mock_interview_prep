@@ -336,6 +336,7 @@ ai_mock_interview_prep/
 │   ├── runner/code-runner.ts     # ★ Web Worker code sandbox
 │   ├── rate-limit.ts             # Transactional Firestore rate limiter
 │   ├── http/body.ts              # Bounded JSON body reader (size + array caps before Zod)
+│   ├── auth/profile.ts           # Profile from a verified Google token (pure, tested)
 │   ├── site.ts                   # SITE_URL — the one canonical production URL
 │   ├── theme.ts                  # Theme choice, storage, pre-paint script
 │   ├── utils.ts                  # cn(), tech logos
@@ -356,7 +357,7 @@ ai_mock_interview_prep/
 ├── hooks/
 │   └── useSpeechRecognition.ts   # ★ Robust browser speech-to-text
 │
-├── tests/                        # Vitest — 22 files, 231 tests
+├── tests/                        # Vitest — 23 files, 236 tests
 ├── public/                       # Static assets (avatars, icons — no brand logos)
 └── .github/workflows/ci.yml      # Typecheck + lint + tests on push/PR
 ```
@@ -745,6 +746,34 @@ User fills form → AuthForm.onSubmit (client)
 ```
 
 **Why swap the ID token for a session cookie?** ID tokens expire in about an hour and would force constant re-authentication. A Firebase **session cookie** lasts up to two weeks (7 days here), is verifiable server-side without a network round trip on every request, and — being `httpOnly` — is invisible to JavaScript, so XSS can't steal it.
+
+## "Continue with Google"
+
+One button on both the sign-in and sign-up pages; the server decides whether it's a first visit.
+
+```text
+Click → AuthForm.onGoogle (client)
+  │
+  ├─ signInWithPopup(auth, GoogleAuthProvider{prompt: select_account})   [Firebase Client]
+  ├─ credential.user.getIdToken()
+  │
+  ├─ signInWithGoogle({ idToken })                                       [Server Action]
+  │     ├─ auth.verifyIdToken(idToken)
+  │     ├─ profileFromClaims(claims)     lib/auth/profile.ts — must be google.com,
+  │     │                                 verified email; name falls back to the
+  │     │                                 address's local part, capped at 100 chars
+  │     ├─ users/{uid}.create(profile)   first visit only — create() never
+  │     │                                 overwrites a returning user's profile
+  │     └─ setSessionCookie(idToken)     same session as email/password
+  │
+  └─ router.push("/")
+```
+
+- **Nothing is trusted from the client** except the ID token: uid, email, name and the fact that Google was used all come from the verified token. The session layer requires a `users/{uid}` document, which is why the profile is created here and not left to a later step.
+- **Errors are quiet when they should be:** closing the Google window is not an error; a blocked pop-up, an email that already has a password account, or a domain that isn't authorized each get a one-line explanation.
+- **Setup it depends on** (Firebase console → Authentication): the Google provider enabled, and the production domain `prepwise-studio.vercel.app` listed under *Settings → Authorized domains*. Pop-up sign-in fails with `auth/unauthorized-domain` on any domain missing from that list; email/password sign-in is unaffected by it.
+- **Account linking:** Firebase keeps one account per email address. A Gmail address that already has a password account and signs in with Google gets the **same uid** (so interviews and feedback are kept), but if that email was never verified Firebase removes the password method; with a verified email, the two methods are linked instead.
+- **Brand mark:** the multicolour Google "G" is the only third-party logo in the app, used because Google's sign-in branding guidelines require it on this button.
 
 ## Reading the session
 
@@ -2423,7 +2452,7 @@ This codebase does (b), because most readers are only ever called from server co
 
 # 21. Testing & CI
 
-**231 tests across 22 files.** All target deterministic logic — no rendering, and no real network (the two files that touch `fetch` use a fake).
+**236 tests across 23 files.** All target deterministic logic — no rendering, and no real network (the two files that touch `fetch` use a fake).
 
 | File | Covers |
 |---|---|
@@ -2446,6 +2475,7 @@ This codebase does (b), because most readers are only ever called from server co
 | `speech-text.test.ts` | The production comma-loop reply, punctuation runs, echoed instructions, false-positive guards, cleaning, sentence chunking |
 | `company.test.ts` | Company-name cleaning and caps, built-in style matching, monograms, stable colours |
 | `ai-errors.test.ts` | Failure classification with the SDK's real `APICallError`/`RetryError`, user messages never leak provider text, jittered backoff bounds, fallback simulations (brief overload, sustained overload, quota, all models down, budget) |
+| `auth-profile.test.ts` | Google sign-in profile: verified Google tokens only, name fallback and cap, other providers and unverified emails rejected |
 | `http-body.test.ts` | Body guard: byte cap (declared and actual), malformed JSON, oversized and deeply nested arrays |
 | `theme.test.ts` | Theme resolution, stored-value validation, the pre-paint script is self-contained |
 | `library.test.ts` | Collection-name cleaning, case-insensitive grouping and counts, URL view parsing, All / collection / Archived filtering (deleted never shown) |
