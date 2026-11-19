@@ -2394,7 +2394,7 @@ Commit `1173c62` (September 2025) added `.env.local` to this **public** reposito
 
 | Secret | Still in use? | Action |
 |---|---|---|
-| `FIREBASE_PRIVATE_KEY` (service account `firebase-adminsdk-fbsvc@…`) | **Yes** — local and Vercel production both use the leaked key | Rotate: create a new key, install locally and on Vercel, verify, then disable and delete the old key |
+| `FIREBASE_PRIVATE_KEY` (service account `firebase-adminsdk-fbsvc@…`) | **Rotated 19 Nov 2026** | New key installed locally and on Vercel (now stored as a *Sensitive* variable). Old key deleted in Google Cloud; Google now rejects it (`invalid-credential`). Production verified on a fresh deployment afterwards |
 | `GOOGLE_GENERATIVE_AI_API_KEY` | No — local and production use a newer key | Delete the old key in Google AI Studio if it still exists |
 | `NEXT_PUBLIC_VAPI_WEB_TOKEN` | No — Vapi is no longer used | Revoke in the Vapi dashboard |
 
@@ -2548,7 +2548,7 @@ These were all found and repaired; they're listed because the *reasoning* is mor
 
 **3. `getFeedbackByUserId` is unbounded.** Fine for tens of interviews, wasteful at hundreds. The fix (a rolling per-user stats document) is described in §24.
 
-**4. Leaked credentials in git history** (see §20, *Secret exposure & rotation status*). The Firebase Admin key is still the leaked one and must be rotated by the project owner in the Google Cloud console; the old Gemini key and Vapi token should be revoked. This is the highest-priority outstanding item.
+**4. Old credentials in git history** (see §20, *Secret exposure & rotation status*). The Firebase Admin key was rotated on 19 November 2026 and the leaked one deleted. Still to do by the owner: confirm the old Gemini key is deleted in Google AI Studio and revoke the old Vapi token.
 
 **5. Filter links opened fresh land at the top.** A bookmarked `/?collection=…#your-interviews` loads with the loading skeleton first, so the browser's jump to the anchor happens before the section exists. Clicking the chips in-app is unaffected (`scroll={false}` keeps your place).
 
