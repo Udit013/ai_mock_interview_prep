@@ -29,5 +29,11 @@ jobs:
       - name: Unit tests
         run: npm test
 
+      # Vercel's Node 22 runtime can't require() ES modules. A dependency that
+      # needs that (firebase-admin 14 did) builds fine and then 500s on every
+      # request — so load the server SDKs the way production does.
+      - name: Server SDKs load on the production runtime
+        run: node --no-experimental-require-module -e "require('firebase-admin/app'); require('firebase-admin/auth'); require('firebase-admin/firestore'); console.log('ok')"
+
 # Production builds run on Vercel with real secrets; CI stays secret-free by
 # verifying types, lint and unit tests only.

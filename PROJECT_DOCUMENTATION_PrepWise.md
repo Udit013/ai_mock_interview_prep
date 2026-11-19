@@ -2053,7 +2053,7 @@ An ink tile holding a four-bar level meter, the tallest bar in the accent — a 
 | `next` 15.5.29 | Full-stack framework: routing, RSC, Server Actions, API routes, bundling | Everywhere | Vite + Express: more control, but you build routing/SSR/deploy yourself |
 | `react` / `react-dom` 19 | UI runtime; RSC + `use` hook support | Everywhere | Vue/Svelte — no reason to switch |
 | `firebase` 11 | **Client** SDK — email/password auth in the browser | `firebase/client.ts`, `AuthForm` | Auth.js: more providers, more setup |
-| `firebase-admin` 14 | **Server** SDK — verify cookies, Firestore access | `firebase/admin.ts`, all actions | Required for privileged operations |
+| `firebase-admin` 13 | **Server** SDK — verify cookies, Firestore access | `firebase/admin.ts`, all actions | Required for privileged operations |
 | `ai` 5 (Vercel AI SDK) | `generateText`/`generateObject`; schema-constrained output | `adaptive.ts`, `resume.ts`, `interview.action.ts` | Raw Gemini SDK: no Zod integration, hand-rolled JSON repair |
 | `@ai-sdk/google` 2 | Gemini provider for the AI SDK | Same | Swappable — provider abstraction means changing models is one line |
 | `zod` 3 | Runtime validation for requests **and** LLM output | Routes, schemas, forms | Yup/Valibot; Zod has the best AI-SDK integration |
@@ -2425,7 +2425,7 @@ The browser never talks to Firestore — `firebase/client.ts` initialises **Auth
 
 ## Dependency audit (November 2026)
 
-`npm audit` now reports **9** findings: **6 high, 1 moderate, 2 low, 0 critical** — down from 23 (12 high) before the upgrades below. None of the remaining ones is reachable as PrepWise uses the package:
+`npm audit` now reports **6 high, 2 low and a moderate chain under `firebase-admin` 13, 0 critical** — down from 12 high before the upgrades below. None of the remaining ones is reachable as PrepWise uses the package:
 
 | Package | Severity | Exploitable here? | Why / mitigation |
 |---|---|---|---|
@@ -2433,12 +2433,13 @@ The browser never talks to Firestore — `firebase/client.ts` initialises **Auth
 | `firebase` 11, `@firebase/firestore`, `@firebase/firestore-compat`, `@grpc/grpc-js` 1.9 | High (4) | No | Only `firebase/auth` is imported; the Firestore client and its Node-only gRPC transport never ship. Not fixable by upgrading — firebase 12 still pins grpc-js 1.9 |
 | `postcss` (bundled in `next`) | High | No | Build-time only, processing our own CSS. Fix needs Next 16 |
 | `next` | Moderate | No | Only via the bundled `postcss` above |
+| `firebase-admin` 13 chain (`uuid`, `google-gax`, `teeny-request`, `retry-request`, `@google-cloud/*`) | Moderate | No | `uuid` buffer bounds check — PrepWise never passes a buffer. v14 fixes it but can't run on Vercel's Node 22 (above) |
 | `dompurify` (in `monaco-editor`) | Low (2) | No | Monaco loads from jsDelivr at runtime, not from `node_modules`; `npm audit fix` would *downgrade* Monaco, so it was rejected |
 
 **What changed in this round:**
 - `ai` 4 → **5.0.291** and `@ai-sdk/google` 1 → **2.0.111** cleared six highs (`ai`, `@ai-sdk/provider-utils`, `@ai-sdk/google`, `@ai-sdk/react`, `@ai-sdk/ui-utils`, `jsondiffpatch`). The only code change was `maxTokens` → `maxOutputTokens`; error class names are unchanged, so `lib/ai/errors.ts` needed nothing. `ai` 5 brings `@ai-sdk/gateway` (Vercel's paid gateway) as a dependency, but it is only used when a model is passed as a bare string — PrepWise always passes Google provider models, so it stays unused and free.
 - `ai` 5's `provider-utils` depends on `undici` 5 (14 advisories, plus `@fastify/busboy`), used **only** by a "safe download" fetch for file/image URLs in prompts — which PrepWise never sends. Pinned to the patched `undici` **6.29.1** via an npm `overrides` entry scoped to `@ai-sdk/provider-utils`; v6 keeps the `Agent`/`fetch` API that code uses.
-- `firebase-admin` 13 → **14.5.1** cleared the moderate Google Cloud chain (`uuid`, `google-gax`, `teeny-request`, `retry-request`, `@google-cloud/*`). Requires Node ≥ 22 — Vercel runs 22.x. Session verification, Firestore reads/writes, the rate-limit transaction and the delete batch were re-verified.
+- `firebase-admin` 13 → 14.5.1 was tried and **rolled back after it broke production**: v14's `jwks-rsa` `require()`s `jose` 6, an ES-module-only package. Node 26 locally allows that, so every local check passed; Vercel's Node 22 runtime does not, and every server request returned 500 for about 10 minutes until 13.10.0 was restored. CI now runs `node --no-experimental-require-module` against the server SDKs, which reproduces Vercel's failure exactly, so this class of break can't ship again. The moderate Google Cloud chain it would have cleared (`uuid` buffer check — never called with a buffer) stays open until firebase-admin ships a CommonJS-safe release.
 - **Behaviour was proven, not assumed:** `tests/live-ai.test.ts` ran the same five real-API checks on v4 (baseline) and v5 — résumé structuring and coaching, an adaptive turn, feedback scoring, plain-text generation, and a real 404 failover — all pass on both.
 
 ## Incremental upgrade plan
@@ -2450,7 +2451,7 @@ Ordered by security value per unit of risk. Each phase is its own branch and pul
 | 0 | Body guard before Zod; patch-level updates | The one production-reachable path (Zod arrays); 3 dev/low advisories | None | **Done** |
 | 1 | `ai` 4 → **5.0.291**, `@ai-sdk/google` 1 → **2.0.111** (+ `undici` 6 override) | 6 highs, then the 2 new ones `ai` 5 brought in | One option rename (`maxTokens` → `maxOutputTokens`) | **Done** |
 | 2 | `zod` 3 → 4 | `zod` high (already mitigated) | 7 files of schemas; **also requires `@hookform/resolvers` 4 → 5+** (every form's validation layer) and changes the JSON schemas sent to Gemini for structured output | Deferred — two majors for an already-mitigated issue; do with its own live-AI and form testing pass |
-| 3 | `firebase-admin` 13 → **14.5.1** | Moderate chain (`uuid`, `google-gax`, `teeny-request`, `retry-request`) | None in code; needs Node ≥ 22 (Vercel: 22.x) | **Done** |
+| 3 | `firebase-admin` 13 → 14 | Moderate chain (`uuid`, `google-gax`, `teeny-request`, `retry-request`) | None in code — but v14 needs `require()` of ES modules, which Vercel's Node 22 runtime rejects | **Blocked** — tried and rolled back; CI now guards against it |
 | 4 | `next` 15 → 16 | `postcss` (build-time) | Largest: framework major. Lowest value, so last | Deferred |
 | — | `firebase` client / `@grpc/grpc-js` 1.9 | — | Not fixable by upgrading (firebase 12 still pins grpc-js 1.9) and not reachable (Firestore client never imported) | Accepted |
 
