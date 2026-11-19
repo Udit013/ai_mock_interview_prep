@@ -249,7 +249,8 @@ The one thing deliberately *not* trusted-but-accepted is `companyMode`, because 
 ai_mock_interview_prep/
 │
 ├── app/                          # Next.js App Router — routes ARE folders
-│   ├── layout.tsx                # Root layout: <html>, font, metadata, skip link, Toaster
+│   ├── layout.tsx                # Root layout: <html>, font, metadata, skip link, Toaster, nonce'd theme script
+│   ├── runner/                   # /runner/js-worker.js, /runner/py-worker.js — code-runner workers (own CSP)
 │   ├── globals.css               # Tailwind v4 theme + all custom classes
 │   ├── not-found.tsx             # Branded 404
 │   ├── error.tsx                 # Error boundary with "Try again"
@@ -334,6 +335,8 @@ ai_mock_interview_prep/
 │   │   ├── library.ts            # Collections, archive and dashboard filters
 │   │   └── turn-client.ts        # Browser call to /respond: timeout + outcomes
 │   ├── runner/code-runner.ts     # ★ Web Worker code sandbox
+│   ├── runner/worker-sources.ts  # Worker source + paths, served same-origin by app/runner/*
+│   ├── security/csp.ts           # Page CSP (nonce + strict-dynamic) and worker CSPs
 │   ├── rate-limit.ts             # Transactional Firestore rate limiter
 │   ├── http/body.ts              # Bounded JSON body reader (size + array caps before Zod)
 │   ├── auth/profile.ts           # Profile from a verified Google token (pure, tested)
@@ -342,6 +345,7 @@ ai_mock_interview_prep/
 │   ├── utils.ts                  # cn(), tech logos
 │   └── buffer-shim.js            # Node 22+ compat patch
 │
+├── middleware.ts                 # Per-request CSP nonce for pages (edge)
 ├── constants/
 │   ├── index.ts                  # tech mappings, feedbackSchema
 │   └── companies.ts              # ★ Company interview mode registry
@@ -357,7 +361,7 @@ ai_mock_interview_prep/
 ├── hooks/
 │   └── useSpeechRecognition.ts   # ★ Robust browser speech-to-text
 │
-├── tests/                        # Vitest — 23 files, 236 tests
+├── tests/                        # Vitest — 25 files: 243 tests + 5 opt-in live Gemini checks
 ├── public/                       # Static assets (avatars, icons — no brand logos)
 └── .github/workflows/ci.yml      # Typecheck + lint + tests on push/PR
 ```
@@ -1124,7 +1128,7 @@ Defence in depth, cheapest first:
 
 | Layer | What it does |
 |---|---|
-| `maxTokens: 1500` on every turn | A loop can't stream thousands of tokens; a cut-off object fails parsing instead |
+| `maxOutputTokens: 1500` on every turn | A loop can't stream thousands of tokens; a cut-off object fails parsing instead |
 | `isDegenerateReply` | Flags replies that are too long, mostly punctuation, a run of 8+ identical characters, a 4-word phrase repeated 3+ times, or leaked prompt text. Tested against the exact reply from the incident — and against legitimate lines with numbers ("1000000 requests"), "JSON", and "résumé bullet points", which must pass |
 | One retry, then `fallbackTurn()` | A malformed reply is regenerated once; if it's still unusable, a scripted, natural line ("Got it, thank you. Let's switch gears. <next seed question>") keeps the interview moving. Pure and schema-checked in tests |
 | `cleanSpokenText` | Strips markdown, collapses `,,,,` → `,`, and caps at 600 characters — ending on the question where possible |
@@ -1896,7 +1900,18 @@ const timer = setTimeout(() => finish({
 worker.onmessage = (ev) => finish({ logs: ev.data?.logs ?? [], error: ev.data?.error });
 ```
 
-A `settled` flag ensures `finish()` runs exactly once, whichever fires first — then it terminates the worker and revokes the blob URL. The `URL.revokeObjectURL(url)` matters: without it every run leaks a blob URL.
+A `settled` flag ensures `finish()` runs exactly once, whichever fires first — then it terminates the worker. A fresh JavaScript worker is created per run, because terminating it is the only way to stop a runaway loop.
+
+## Where the workers come from — and their own CSP
+
+The workers used to be built from `blob:` URLs. A `blob:` worker **inherits the page's Content-Security-Policy**, so running candidate code (`new Function`, WebAssembly) would have forced `'unsafe-eval'` onto every page. Instead, the worker source lives in `lib/runner/worker-sources.ts` and is served same-origin, as static files, by `app/runner/js-worker.js/route.ts` and `app/runner/py-worker.js/route.ts`. A worker loaded from its own URL gets **its own policy** from that response (set in `next.config.ts`):
+
+| Worker | Policy | Effect |
+|---|---|---|
+| `/runner/js-worker.js` | `default-src 'none'; script-src 'unsafe-eval'` | Candidate code can run, but **cannot fetch, open sockets or import scripts** — verified: `XMLHttpRequest` and `importScripts` both throw `NetworkError` |
+| `/runner/py-worker.js` | `default-src 'none'; script-src 'unsafe-eval' 'wasm-unsafe-eval' https://cdn.jsdelivr.net/pyodide/; connect-src https://cdn.jsdelivr.net/pyodide/` | Pyodide loads from its pinned CDN path only; nothing else is reachable |
+
+The page itself keeps a strict, nonce-based policy (§20).
 
 ## Python via Pyodide
 
@@ -1922,11 +1937,13 @@ return runPython(code, pyWarm ? 15000 : 90000);
 | `twoSum([2,7,11,15], 9)` | `result: [0, 1]`, objects pretty-printed |
 | `null.foo()` | `TypeError: Cannot read properties of null` captured |
 | `while(true){}` | `timedOut: true`, worker killed, page responsive |
+| Network from candidate JS (`XMLHttpRequest`, `importScripts`) | Blocked by the worker's CSP (`NetworkError`) |
+| Python `print(sys.version…)` under the worker CSP | Pyodide downloaded and ran in ~5 s (`python 3.12.1`) |
 | Java selected | Run disabled, explanatory message shown |
 
 ## Honest scope of this sandbox
 
-This is a **single-user, same-origin** sandbox appropriate for a practice tool where you run *your own* code. It is **not** a multi-tenant code-execution service. A worker can still consume CPU until terminated and can make network requests. Running *other people's* untrusted code at scale would require server-side container/gVisor/Firecracker isolation with CPU, memory, and network limits — deliberately out of scope for a $0 stack.
+This is a **single-user, same-origin** sandbox appropriate for a practice tool where you run *your own* code. It is **not** a multi-tenant code-execution service. A worker can still consume CPU until terminated; the JavaScript worker has no network access at all, and the Python worker can reach only the pinned Pyodide CDN path. Running *other people's* untrusted code at scale would require server-side container/gVisor/Firecracker isolation with CPU, memory, and network limits — deliberately out of scope for a $0 stack.
 
 **Interview Questions — Sandbox**
 
@@ -2036,9 +2053,9 @@ An ink tile holding a four-bar level meter, the tallest bar in the accent — a 
 | `next` 15.5.29 | Full-stack framework: routing, RSC, Server Actions, API routes, bundling | Everywhere | Vite + Express: more control, but you build routing/SSR/deploy yourself |
 | `react` / `react-dom` 19 | UI runtime; RSC + `use` hook support | Everywhere | Vue/Svelte — no reason to switch |
 | `firebase` 11 | **Client** SDK — email/password auth in the browser | `firebase/client.ts`, `AuthForm` | Auth.js: more providers, more setup |
-| `firebase-admin` 13 | **Server** SDK — verify cookies, Firestore access | `firebase/admin.ts`, all actions | Required for privileged operations |
-| `ai` 4 (Vercel AI SDK) | `generateText`/`generateObject`; schema-constrained output | `adaptive.ts`, `resume.ts`, `interview.action.ts` | Raw Gemini SDK: no Zod integration, hand-rolled JSON repair |
-| `@ai-sdk/google` | Gemini provider for the AI SDK | Same | Swappable — provider abstraction means changing models is one line |
+| `firebase-admin` 14 | **Server** SDK — verify cookies, Firestore access | `firebase/admin.ts`, all actions | Required for privileged operations |
+| `ai` 5 (Vercel AI SDK) | `generateText`/`generateObject`; schema-constrained output | `adaptive.ts`, `resume.ts`, `interview.action.ts` | Raw Gemini SDK: no Zod integration, hand-rolled JSON repair |
+| `@ai-sdk/google` 2 | Gemini provider for the AI SDK | Same | Swappable — provider abstraction means changing models is one line |
 | `zod` 3 | Runtime validation for requests **and** LLM output | Routes, schemas, forms | Yup/Valibot; Zod has the best AI-SDK integration |
 | `react-hook-form` 7 | Uncontrolled forms — no re-render per keystroke | `AuthForm`, `InterviewForm` | Controlled `useState` forms re-render constantly |
 | `@hookform/resolvers` | Bridges Zod schemas into react-hook-form | Both forms | Hand-written validators |
@@ -2378,9 +2395,29 @@ Every Gemini-backed endpoint runs the same sequence, in this order:
 | No timeouts on Gemini calls or functions | A stalled model call hung the function until the platform killed it with a generic 504 | 45 s `abortSignal` on every call, `maxDuration = 60` on every route/page that calls Gemini |
 | Next.js 15.2.9 had a critical advisory (image-optimizer RCE) plus high-severity Server Action / RSC DoS issues | Framework-level exposure | Upgraded to 15.5.27; `npm audit` (production) went from 30 to 22 findings, critical from 5 to 0 |
 | No security headers | Pages could be framed (clickjacking) and MIME-sniffed | `X-Frame-Options: DENY`, `nosniff`, `Referrer-Policy`, `Permissions-Policy` (HSTS comes from Vercel) |
-| No Content-Security-Policy | No backstop against framing, `<base>` hijacking or plugin content | Baseline CSP: `frame-ancestors 'none'; base-uri 'self'; object-src 'none'; form-action 'self'`. A strict `script-src` is not set — see §23 |
+| No Content-Security-Policy | No backstop if markup injection ever slipped through | **Nonce-based CSP** on every page (below): scripts run only with the per-request nonce; no `unsafe-inline`, no `unsafe-eval` |
 | Résumé-parse route returned the provider's raw error text (e.g. *"Failed after 2 attempts. This model is currently experiencing high demand."*) | Leaked provider internals and gave users nothing actionable | Every AI route maps failures through `userMessageFor()` and answers 503 (§8.7) |
 | Zod 3 keeps validating every element of an array after `.max()` fails, allocating one issue object per bad element (GHSA-mrhx-c7xc-m3w5, fixed only in Zod 4) | A signed-in caller could post a multi-MB junk array and push the function towards out-of-memory | `lib/http/body.ts` caps the raw body (1 MB turn, 300 KB generate) and rejects any array over 500 items **before** Zod runs → 413 |
+
+## Content-Security-Policy — `middleware.ts`, `lib/security/csp.ts`
+
+**How it works.** Edge middleware creates a random nonce for every page request and sends the policy on both the request (Next.js reads it from there and stamps the nonce onto all of its own `<script>` tags) and the response. The root layout reads the nonce from an `x-nonce` request header for its one inline script, the pre-paint theme script. Reading request headers makes every page dynamic, which this app already was — only `_not-found` changed, so it too gets a nonce.
+
+**The page policy (production):**
+
+| Directive | Value | Why |
+|---|---|---|
+| `script-src` | `'nonce-…' 'strict-dynamic'` (+ host fallbacks for CSP2-only browsers) | Only nonce'd scripts run; scripts *they* load (Monaco from jsDelivr, Google's sign-in helper) are trusted transitively. Injected markup can't execute — no nonce, no inline handlers, no `eval` |
+| `style-src` | `'self' 'unsafe-inline'` jsDelivr | React `style` attributes and Monaco's injected `<style>` need it; styles can't run code |
+| `connect-src` | `'self'` `*.googleapis.com` `apis.google.com` jsDelivr | Own API, Firebase Auth, Monaco |
+| `frame-src` | `prepwise-d59e4.firebaseapp.com` `accounts.google.com` `apis.google.com` | Firebase's sign-in helper frame and Google sign-in |
+| `worker-src` | `'self' blob:` | Same-origin code-runner workers; Monaco's language workers |
+| `img-src` / `font-src` | `'self' data:` jsDelivr (+ Google profile images) | Tech icons, Monaco's icon font |
+| `object-src 'none'`, `base-uri 'self'`, `form-action 'self'`, `frame-ancestors 'none'`, `upgrade-insecure-requests` | | Plugins, `<base>` hijacking, cross-site form posts, clickjacking |
+
+Local development adds `'unsafe-eval'` and `ws:` for hot reload only. API routes, static assets and the runner workers are excluded from the middleware; the workers carry their own policies (§14). Middleware runs on Vercel's free tier, so this costs nothing.
+
+**Verified on a production build** (`next start`): all 30 `<script>` tags carried the nonce, and the nonce changed per request. Dashboard, new-interview form, an interview with Monaco, JavaScript and Python runs, adaptive turns, feedback, replay, Résumé Coach, 404 and the signed-out sign-in page produced **no CSP violations**. Clicking "Continue with Google" loaded `apis.google.com` and the Firebase auth frame without violations. The only violations logged were the two deliberate ones from the sandbox test (network and `importScripts` from candidate code, both blocked).
 
 ## Firestore security rules
 
@@ -2388,21 +2425,21 @@ The browser never talks to Firestore — `firebase/client.ts` initialises **Auth
 
 ## Dependency audit (November 2026)
 
-`npm audit` reports **23** findings: 12 high, 9 moderate, 2 low, **0 critical**. Every remaining fix requires a major upgrade, so each was assessed for real exploitability instead of forced:
+`npm audit` now reports **9** findings: **6 high, 1 moderate, 2 low, 0 critical** — down from 23 (12 high) before the upgrades below. None of the remaining ones is reachable as PrepWise uses the package:
 
-| Package (high) | Advisory | Exploitable here? | Why / mitigation |
+| Package | Severity | Exploitable here? | Why / mitigation |
 |---|---|---|---|
-| `zod` 3.25 | Memory exhaustion via oversized arrays | **Was, now mitigated** | Body guard rejects oversized arrays before Zod (above). Zod 4 is a breaking API change across ~20 schemas |
-| `ai` 4.3 | File-type allow-list bypass on upload | No | Applies to AI SDK UI file attachments; PrepWise uploads PDFs through its own route with its own checks |
-| `@ai-sdk/provider-utils` (via `ai`, `@ai-sdk/google`) | Unbounded provider response bodies | Low | The response comes from Google's Gemini API, not from users; calls are time-capped at 45 s |
-| `jsondiffpatch` (via `ai`) | XSS in `HtmlFormatter`; prototype pollution in patch APIs | No | Neither API is reachable from PrepWise code |
-| `@ai-sdk/react`, `@ai-sdk/ui-utils` | Inherit the above | No | Never imported |
-| `firebase` 11, `@firebase/firestore`, `@firebase/firestore-compat`, `@grpc/grpc-js` 1.9 | gRPC server-side issues | No | Only `firebase/auth` is imported; the Firestore client (and its Node-only gRPC transport) never ships. firebase 12 still pins grpc-js 1.9, so upgrading wouldn't clear it. The Admin SDK's grpc-js is 1.14.5 (patched) |
-| `postcss` (bundled in `next`) | XSS in stringify; source-map file read | No | Build-time only, processing our own CSS |
+| `zod` 3.25 | High | **Was, now mitigated** | Memory exhaustion via oversized arrays; the body guard rejects oversized arrays before Zod (above). Fix needs Zod 4 — see plan |
+| `firebase` 11, `@firebase/firestore`, `@firebase/firestore-compat`, `@grpc/grpc-js` 1.9 | High (4) | No | Only `firebase/auth` is imported; the Firestore client and its Node-only gRPC transport never ship. Not fixable by upgrading — firebase 12 still pins grpc-js 1.9 |
+| `postcss` (bundled in `next`) | High | No | Build-time only, processing our own CSS. Fix needs Next 16 |
+| `next` | Moderate | No | Only via the bundled `postcss` above |
+| `dompurify` (in `monaco-editor`) | Low (2) | No | Monaco loads from jsDelivr at runtime, not from `node_modules`; `npm audit fix` would *downgrade* Monaco, so it was rejected |
 
-Moderates: the Admin SDK's Google Cloud chain (`uuid` buffer check — PrepWise never passes a buffer), `next` (via postcss, above), and Monaco's DOMPurify. **Monaco is loaded from jsDelivr at runtime** (0.55.1), not from `node_modules`, and DOMPurify only sanitises the editor's own hover text.
-
-**Fixed without majors:** `typescript-eslint` 8.73, `minimatch`, `fast-xml-parser` 5.12. `npm audit fix` was tried first and **rejected** — it downgraded `monaco-editor` 0.57 → 0.55 and `dompurify` 3.4 → 3.2 (raising the XSS rating), so the safe updates were applied individually.
+**What changed in this round:**
+- `ai` 4 → **5.0.291** and `@ai-sdk/google` 1 → **2.0.111** cleared six highs (`ai`, `@ai-sdk/provider-utils`, `@ai-sdk/google`, `@ai-sdk/react`, `@ai-sdk/ui-utils`, `jsondiffpatch`). The only code change was `maxTokens` → `maxOutputTokens`; error class names are unchanged, so `lib/ai/errors.ts` needed nothing. `ai` 5 brings `@ai-sdk/gateway` (Vercel's paid gateway) as a dependency, but it is only used when a model is passed as a bare string — PrepWise always passes Google provider models, so it stays unused and free.
+- `ai` 5's `provider-utils` depends on `undici` 5 (14 advisories, plus `@fastify/busboy`), used **only** by a "safe download" fetch for file/image URLs in prompts — which PrepWise never sends. Pinned to the patched `undici` **6.29.1** via an npm `overrides` entry scoped to `@ai-sdk/provider-utils`; v6 keeps the `Agent`/`fetch` API that code uses.
+- `firebase-admin` 13 → **14.5.1** cleared the moderate Google Cloud chain (`uuid`, `google-gax`, `teeny-request`, `retry-request`, `@google-cloud/*`). Requires Node ≥ 22 — Vercel runs 22.x. Session verification, Firestore reads/writes, the rate-limit transaction and the delete batch were re-verified.
+- **Behaviour was proven, not assumed:** `tests/live-ai.test.ts` ran the same five real-API checks on v4 (baseline) and v5 — résumé structuring and coaching, an adaptive turn, feedback scoring, plain-text generation, and a real 404 failover — all pass on both.
 
 ## Incremental upgrade plan
 
@@ -2411,9 +2448,9 @@ Ordered by security value per unit of risk. Each phase is its own branch and pul
 | Phase | Change | Clears | Breaking surface in PrepWise | Status |
 |---|---|---|---|---|
 | 0 | Body guard before Zod; patch-level updates | The one production-reachable path (Zod arrays); 3 dev/low advisories | None | **Done** |
-| 1 | `ai` 4 → **5.0.x**, `@ai-sdk/google` 1 → **2.0.x** (keeps `zod` 3.25, which `ai` 5 still supports) | 6 highs: `ai`, `@ai-sdk/provider-utils`, `@ai-sdk/google`, `@ai-sdk/react`, `@ai-sdk/ui-utils`, `jsondiffpatch` | `lib/ai/*` and three routes: `maxTokens` → `maxOutputTokens`, usage field names, message types. Error classes (`APICallError`, `RetryError`) still exist, so `lib/ai/errors.ts` tests carry over | Planned |
-| 2 | `zod` 3 → 4 | `zod` high (already mitigated) | ~20 schemas; `.describe()`/`.transform()` usages; error-format changes in `safeParse` callers | Planned, after phase 1 |
-| 3 | `firebase-admin` 13 → 14 | Moderate chain (`uuid`, `google-gax`, `teeny-request`, `retry-request`) | Admin init in `firebase/admin.ts`; Node version on Vercel | Planned |
+| 1 | `ai` 4 → **5.0.291**, `@ai-sdk/google` 1 → **2.0.111** (+ `undici` 6 override) | 6 highs, then the 2 new ones `ai` 5 brought in | One option rename (`maxTokens` → `maxOutputTokens`) | **Done** |
+| 2 | `zod` 3 → 4 | `zod` high (already mitigated) | 7 files of schemas; **also requires `@hookform/resolvers` 4 → 5+** (every form's validation layer) and changes the JSON schemas sent to Gemini for structured output | Deferred — two majors for an already-mitigated issue; do with its own live-AI and form testing pass |
+| 3 | `firebase-admin` 13 → **14.5.1** | Moderate chain (`uuid`, `google-gax`, `teeny-request`, `retry-request`) | None in code; needs Node ≥ 22 (Vercel: 22.x) | **Done** |
 | 4 | `next` 15 → 16 | `postcss` (build-time) | Largest: framework major. Lowest value, so last | Deferred |
 | — | `firebase` client / `@grpc/grpc-js` 1.9 | — | Not fixable by upgrading (firebase 12 still pins grpc-js 1.9) and not reachable (Firestore client never imported) | Accepted |
 
@@ -2452,7 +2489,7 @@ This codebase does (b), because most readers are only ever called from server co
 
 # 21. Testing & CI
 
-**236 tests across 23 files.** All target deterministic logic — no rendering, and no real network (the two files that touch `fetch` use a fake).
+**243 tests across 24 files, plus `live-ai.test.ts` (5 opt-in checks against the real Gemini API, skipped unless `LIVE_AI=1`; never run in CI).** All target deterministic logic — no rendering, and no real network (the two files that touch `fetch` use a fake).
 
 | File | Covers |
 |---|---|
@@ -2477,6 +2514,8 @@ This codebase does (b), because most readers are only ever called from server co
 | `ai-errors.test.ts` | Failure classification with the SDK's real `APICallError`/`RetryError`, user messages never leak provider text, jittered backoff bounds, fallback simulations (brief overload, sustained overload, quota, all models down, budget) |
 | `auth-profile.test.ts` | Google sign-in profile: verified Google tokens only, name fallback and cap, other providers and unverified emails rejected |
 | `http-body.test.ts` | Body guard: byte cap (declared and actual), malformed JSON, oversized and deeply nested arrays |
+| `csp.test.ts` | Page policy is nonce + `strict-dynamic` with no `unsafe-inline`/`unsafe-eval` in production; framing/plugins/base/forms locked; dev-only loosening; Firebase auth domain stays in sync with the client config; worker policies (JS: eval, no network; Python: pinned Pyodide path only) |
+| `live-ai.test.ts` | **Opt-in, real API:** résumé structuring + coaching, an adaptive turn, feedback scoring, plain-text generation, and failover from a nonexistent model id (real 404) to a working one. Used to prove SDK upgrades preserve behaviour |
 | `theme.test.ts` | Theme resolution, stored-value validation, the pre-paint script is self-contained |
 | `library.test.ts` | Collection-name cleaning, case-insensitive grouping and counts, URL view parsing, All / collection / Archived filtering (deleted never shown) |
 
@@ -2587,9 +2626,9 @@ These were all found and repaired; they're listed because the *reasoning* is mor
 
 **7. Not exercised live:** the delete action itself and real (audible) speech after the voice rework were verified through tests and a silent speech stand-in rather than a live run; the delete path's ownership check is the same `ownedInterview()` guard used by archive and collections, which were live-tested.
 
-**8. Content-Security-Policy is a baseline, not strict.** It blocks framing, `<base>` hijacking, plugins and cross-site form posts. A strict `script-src` would need per-request nonces (which makes every page dynamic) because of the inline pre-paint theme script and Next's inline bootstrap, and would have to allow-list jsDelivr (Monaco) and Pyodide.
+**8. The CSP allows inline styles** (`style-src 'unsafe-inline'`) because React `style` attributes and Monaco need them. Styles can't execute code, so scripts stay strictly nonce-only. Vercel's preview-deployment toolbar is blocked by the policy on preview URLs (production is unaffected).
 
-**9. Major dependency upgrades are pending** (AI SDK, Zod 4, Next 16, firebase-admin 14). None is exploitable as used here — see §20 — but they should be done as one planned migration.
+**9. Remaining dependency advisories** (6 high, 1 moderate, 2 low) need Zod 4 + `@hookform/resolvers` 5, Next 16, or a Firebase client release that drops grpc-js 1.9. None is reachable as used — see §20.
 
 **10. Sign-in pages have no theme menu.** They follow the system theme (or a choice saved earlier in the app).
 
