@@ -4,7 +4,7 @@ A full-stack, AI-powered interview platform that conducts **adaptive voice inter
 
 ## Live Demo
 
-**[https://mock-ai-prep.vercel.app](https://mock-ai-prep.vercel.app)**
+**[https://prepwise-studio.vercel.app](https://prepwise-studio.vercel.app)**
 
 > Voice interviews require Chrome or Edge (Web Speech API).
 
@@ -30,6 +30,7 @@ A full-stack, AI-powered interview platform that conducts **adaptive voice inter
 - Questions reference your **actual experience** — e.g. *"Why did you choose DeBERTa over BERT in your Aphasia Detection project?"* or *"Walk me through the deployment architecture of RxFlow."*
 
 ### Light & Dark Themes
+- A distinctive favicon and logo (a four-bar voice meter) that adapt to light and dark browser chrome.
 - A restrained "paper & ink" design in **light and dark**, following your system setting by default, with a remembered manual choice and no flash on load. Every text colour meets **WCAG AA** contrast in both themes.
 
 ### Resilient AI
@@ -62,10 +63,10 @@ A full-stack, AI-powered interview platform that conducts **adaptive voice inter
 
 ### Auth & Production Hardening
 - Firebase Auth with email/password, server-side session cookies, and protected routes.
-- **All AI endpoints require a valid session** — identity is derived server-side from the session cookie, never from the request body — and every request body is **Zod-validated with size bounds**.
+- **All AI endpoints require a valid session** — identity is derived server-side from the session cookie, never from the request body — and every request body is **size-capped before parsing and Zod-validated with field bounds** (oversized bodies get 413).
 - **Per-user daily rate limits** on Gemini-backed endpoints (question generation, interview turns, feedback reports, résumé parsing) via a transactional Firestore counter — serverless-safe, no external services. Every model call also has a hard timeout so a stalled request fails cleanly.
 - **Owner-only access to private interviews**, enforced on direct URLs as well as the community feed; résumé uploads capped at 5 MB.
-- **Unit tests (Vitest) + GitHub Actions CI** (140 tests) covering the deterministic core: speaking analytics, the adaptive engine's termination cap, schema and state bounds, non-answer detection, the interview request timeout/retry logic, and the résumé guard. CI runs typecheck, lint and tests.
+- **Unit tests (Vitest) + GitHub Actions CI** (231 tests) covering the deterministic core: speaking analytics, the adaptive engine's termination cap, schema and state bounds, non-answer detection, the interview request timeout/retry logic, and the résumé guard. CI runs typecheck, lint and tests.
 
 ---
 
@@ -193,6 +194,7 @@ npm run dev   # http://localhost:3000
 1. Import the repo at [vercel.com/new](https://vercel.com/new).
 2. Add the four environment variables above (Production, Preview, Development).
 3. Deploy. Vercel auto-deploys on every push to `main`.
+4. If you deploy under your own domain, change `SITE_URL` in `lib/site.ts` — metadata, Open Graph, `robots.txt` and the sitemap all read it. Share links use the visitor's origin and need no change.
 
 ---
 
@@ -226,4 +228,4 @@ No environment variables were added. No database schema changes for the code-exe
 ---
 
 ## Screenshots
-Visit the live app at **[https://mock-ai-prep.vercel.app](https://mock-ai-prep.vercel.app)** to see it in action.
+Visit the live app at **[https://prepwise-studio.vercel.app](https://prepwise-studio.vercel.app)** to see it in action.

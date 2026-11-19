@@ -1,4 +1,5 @@
 import type { MetadataRoute } from "next";
+import { SITE_URL } from "@/lib/site";
 
 export default function robots(): MetadataRoute.Robots {
   return {
@@ -9,6 +10,7 @@ export default function robots(): MetadataRoute.Robots {
       // via their own noindex meta tag).
       disallow: ["/api/", "/interview", "/resume", "/share/"],
     },
-    sitemap: "https://mock-ai-prep.vercel.app/sitemap.xml",
+    host: SITE_URL,
+    sitemap: `${SITE_URL}/sitemap.xml`,
   };
 }

@@ -4,7 +4,7 @@
 > Every statement below is derived from the actual code in this repo, not from generic templates.
 > Where something is a known limitation, a dead file, or a deliberate trade-off, it says so plainly.
 
-**Live app:** [mock-ai-prep.vercel.app](https://mock-ai-prep.vercel.app) · **Repo:** [Udit013/ai_mock_interview_prep](https://github.com/Udit013/ai_mock_interview_prep)
+**Live app:** [prepwise-studio.vercel.app](https://prepwise-studio.vercel.app) · **Repo:** [Udit013/ai_mock_interview_prep](https://github.com/Udit013/ai_mock_interview_prep)
 
 ---
 
@@ -100,7 +100,7 @@ Let's follow a real visit, with no technical jargon first, then the technical ve
 
 ## The plain-English version
 
-1. You type `mock-ai-prep.vercel.app` into your browser.
+1. You type `prepwise-studio.vercel.app` into your browser.
 2. The server checks: *do you have a valid login cookie?* You don't, so it sends you to the sign-in page.
 3. You sign up. Your email/password go to Google's Firebase, which creates an account and hands your browser a temporary ID card (a token).
 4. Your browser gives that token to *our* server, which verifies it with Firebase and swaps it for a longer-lived, tamper-proof cookie.
@@ -255,6 +255,8 @@ ai_mock_interview_prep/
 │   ├── error.tsx                 # Error boundary with "Try again"
 │   ├── global-error.tsx          # Last resort if the root layout itself fails
 │   ├── robots.ts, sitemap.ts     # Only the public entry points are indexable
+│   ├── icon.svg, favicon.ico, apple-icon.png  # Favicon set (SVG adapts to light/dark)
+│   ├── opengraph-image.tsx       # Social preview card, generated at build
 │   │
 │   ├── (auth)/                   # Route group: unauthenticated pages
 │   │   ├── layout.tsx            # Guard: if logged IN, redirect to /
@@ -333,6 +335,9 @@ ai_mock_interview_prep/
 │   │   └── turn-client.ts        # Browser call to /respond: timeout + outcomes
 │   ├── runner/code-runner.ts     # ★ Web Worker code sandbox
 │   ├── rate-limit.ts             # Transactional Firestore rate limiter
+│   ├── http/body.ts              # Bounded JSON body reader (size + array caps before Zod)
+│   ├── site.ts                   # SITE_URL — the one canonical production URL
+│   ├── theme.ts                  # Theme choice, storage, pre-paint script
 │   ├── utils.ts                  # cn(), tech logos
 │   └── buffer-shim.js            # Node 22+ compat patch
 │
@@ -351,7 +356,7 @@ ai_mock_interview_prep/
 ├── hooks/
 │   └── useSpeechRecognition.ts   # ★ Robust browser speech-to-text
 │
-├── tests/                        # Vitest — 21 files, 224 tests
+├── tests/                        # Vitest — 22 files, 231 tests
 ├── public/                       # Static assets (avatars, icons — no brand logos)
 └── .github/workflows/ci.yml      # Typecheck + lint + tests on push/PR
 ```
@@ -1983,9 +1988,15 @@ The legacy Tailwind names used across components (`dark-200`, `light-400`, `prim
 - Third-party widgets follow along through `useResolvedTheme()` (a `MutationObserver` on `<html>`): the Monaco editor switches `light`/`vs-dark`, and Sonner toasts switch theme.
 - Browser chrome uses per-scheme `themeColor`; the social preview card is generated from code (`app/opengraph-image.tsx`) in the same palette.
 
-## Brand mark — `components/Logo.tsx`
+## Brand mark & favicon — `components/Logo.tsx`, `app/icon.svg`
 
-An ink tile holding a four-bar level meter (one bar in the accent) — a voice interview, drawn as inline SVG coloured from tokens, so it is correct in both themes without image assets. It also serves as the AI interviewer's avatar; people are shown as monograms.
+An ink tile holding a four-bar level meter, the tallest bar in the accent — a voice interview, drawn as inline SVG. One geometry (a 32-unit grid: 4-unit bars, 2-unit gaps) is shared by the header logo, the favicon and the social card, so they always match.
+
+- **`LogoMark`** colours itself from tokens (`--ink`, `--ink-fg`, `--mark-accent`), so it flips with the theme. It also serves as the AI interviewer's avatar; people are shown as monograms.
+- **`app/icon.svg`** is the favicon for modern browsers. An embedded `prefers-color-scheme` rule gives a dark tile with a bright orange bar on light browser chrome, and a light tile with deep orange on dark chrome, so it never disappears into the tab strip.
+- **`app/favicon.ico`** (16/32/48 px) and **`app/apple-icon.png`** (180 px) are static fallbacks using the dark tile. They were rendered once from the same SVG with `sharp`, which ships with Next.js; no tool was added.
+
+---
 
 # 17. Every Dependency, and Why
 
@@ -1993,7 +2004,7 @@ An ink tile holding a four-bar level meter (one bar in the accent) — a voice i
 
 | Package | Why it's here | Used in | Alternative & trade-off |
 |---|---|---|---|
-| `next` 15.5.28 | Full-stack framework: routing, RSC, Server Actions, API routes, bundling | Everywhere | Vite + Express: more control, but you build routing/SSR/deploy yourself |
+| `next` 15.5.29 | Full-stack framework: routing, RSC, Server Actions, API routes, bundling | Everywhere | Vite + Express: more control, but you build routing/SSR/deploy yourself |
 | `react` / `react-dom` 19 | UI runtime; RSC + `use` hook support | Everywhere | Vue/Svelte — no reason to switch |
 | `firebase` 11 | **Client** SDK — email/password auth in the browser | `firebase/client.ts`, `AuthForm` | Auth.js: more providers, more setup |
 | `firebase-admin` 13 | **Server** SDK — verify cookies, Firestore access | `firebase/admin.ts`, all actions | Required for privileged operations |
@@ -2307,10 +2318,11 @@ Owner clicks "Revoke link"
 Every Gemini-backed endpoint runs the same sequence, in this order:
 
 ```text
-1. Authenticate   getCurrentUser() → 401
-2. Rate limit     checkRateLimit() → 429
-3. Validate       Zod safeParse    → 400
-4. Execute
+1. Authenticate   getCurrentUser()  → 401
+2. Rate limit     checkRateLimit()  → 429
+3. Bound          readJsonBody()    → 413 / 400   (byte cap, no array > 500 items)
+4. Validate       Zod safeParse     → 400
+5. Execute        AI trouble        → 503 + friendly message (§8.7)
 ```
 
 **Order matters.** Auth first means unauthenticated traffic never touches Firestore's limiter. Rate limiting before validation means a flood of malformed requests still counts against the attacker's quota.
@@ -2337,6 +2349,33 @@ Every Gemini-backed endpoint runs the same sequence, in this order:
 | No timeouts on Gemini calls or functions | A stalled model call hung the function until the platform killed it with a generic 504 | 45 s `abortSignal` on every call, `maxDuration = 60` on every route/page that calls Gemini |
 | Next.js 15.2.9 had a critical advisory (image-optimizer RCE) plus high-severity Server Action / RSC DoS issues | Framework-level exposure | Upgraded to 15.5.27; `npm audit` (production) went from 30 to 22 findings, critical from 5 to 0 |
 | No security headers | Pages could be framed (clickjacking) and MIME-sniffed | `X-Frame-Options: DENY`, `nosniff`, `Referrer-Policy`, `Permissions-Policy` (HSTS comes from Vercel) |
+| No Content-Security-Policy | No backstop against framing, `<base>` hijacking or plugin content | Baseline CSP: `frame-ancestors 'none'; base-uri 'self'; object-src 'none'; form-action 'self'`. A strict `script-src` is not set — see §23 |
+| Résumé-parse route returned the provider's raw error text (e.g. *"Failed after 2 attempts. This model is currently experiencing high demand."*) | Leaked provider internals and gave users nothing actionable | Every AI route maps failures through `userMessageFor()` and answers 503 (§8.7) |
+| Zod 3 keeps validating every element of an array after `.max()` fails, allocating one issue object per bad element (GHSA-mrhx-c7xc-m3w5, fixed only in Zod 4) | A signed-in caller could post a multi-MB junk array and push the function towards out-of-memory | `lib/http/body.ts` caps the raw body (1 MB turn, 300 KB generate) and rejects any array over 500 items **before** Zod runs → 413 |
+
+## Firestore security rules
+
+The browser never talks to Firestore — `firebase/client.ts` initialises **Auth only**, and all reads and writes go through the Admin SDK on the server (which bypasses rules by design). The rules should therefore deny all client access. **Verified** with unauthenticated REST reads of `interviews`, `feedback`, `users` and `shares`: every one returns `403 PERMISSION_DENIED`. The rules live in the Firebase console, not this repo; whether a *signed-in* client token is also denied was not tested.
+
+## Dependency audit (November 2026)
+
+`npm audit` reports **23** findings: 12 high, 9 moderate, 2 low, **0 critical**. Every remaining fix requires a major upgrade, so each was assessed for real exploitability instead of forced:
+
+| Package (high) | Advisory | Exploitable here? | Why / mitigation |
+|---|---|---|---|
+| `zod` 3.25 | Memory exhaustion via oversized arrays | **Was, now mitigated** | Body guard rejects oversized arrays before Zod (above). Zod 4 is a breaking API change across ~20 schemas |
+| `ai` 4.3 | File-type allow-list bypass on upload | No | Applies to AI SDK UI file attachments; PrepWise uploads PDFs through its own route with its own checks |
+| `@ai-sdk/provider-utils` (via `ai`, `@ai-sdk/google`) | Unbounded provider response bodies | Low | The response comes from Google's Gemini API, not from users; calls are time-capped at 45 s |
+| `jsondiffpatch` (via `ai`) | XSS in `HtmlFormatter`; prototype pollution in patch APIs | No | Neither API is reachable from PrepWise code |
+| `@ai-sdk/react`, `@ai-sdk/ui-utils` | Inherit the above | No | Never imported |
+| `firebase` 11, `@firebase/firestore`, `@firebase/firestore-compat`, `@grpc/grpc-js` 1.9 | gRPC server-side issues | No | Only `firebase/auth` is imported; the Firestore client (and its Node-only gRPC transport) never ships. firebase 12 still pins grpc-js 1.9, so upgrading wouldn't clear it. The Admin SDK's grpc-js is 1.14.5 (patched) |
+| `postcss` (bundled in `next`) | XSS in stringify; source-map file read | No | Build-time only, processing our own CSS |
+
+Moderates: the Admin SDK's Google Cloud chain (`uuid` buffer check — PrepWise never passes a buffer), `next` (via postcss, above), and Monaco's DOMPurify. **Monaco is loaded from jsDelivr at runtime** (0.55.1), not from `node_modules`, and DOMPurify only sanitises the editor's own hover text.
+
+**Fixed without majors:** `typescript-eslint` 8.73, `minimatch`, `fast-xml-parser` 5.12. `npm audit fix` was tried first and **rejected** — it downgraded `monaco-editor` 0.57 → 0.55 and `dompurify` 3.4 → 3.2 (raising the XSS rating), so the safe updates were applied individually.
+
+**Recommended next:** the AI SDK major (`ai` 4 → 5+, `@ai-sdk/google` → 2+, `zod` 4) as one planned migration with its own testing pass.
 
 ## Why `lib/data/` is a security control, not a style choice
 
@@ -2361,7 +2400,7 @@ This codebase does (b), because most readers are only ever called from server co
 
 # 21. Testing & CI
 
-**224 tests across 21 files.** All target deterministic logic — no rendering, and no real network (the two files that touch `fetch` use a fake).
+**231 tests across 22 files.** All target deterministic logic — no rendering, and no real network (the two files that touch `fetch` use a fake).
 
 | File | Covers |
 |---|---|
@@ -2384,6 +2423,7 @@ This codebase does (b), because most readers are only ever called from server co
 | `speech-text.test.ts` | The production comma-loop reply, punctuation runs, echoed instructions, false-positive guards, cleaning, sentence chunking |
 | `company.test.ts` | Company-name cleaning and caps, built-in style matching, monograms, stable colours |
 | `ai-errors.test.ts` | Failure classification with the SDK's real `APICallError`/`RetryError`, user messages never leak provider text, jittered backoff bounds, fallback simulations (brief overload, sustained overload, quota, all models down, budget) |
+| `http-body.test.ts` | Body guard: byte cap (declared and actual), malformed JSON, oversized and deeply nested arrays |
 | `theme.test.ts` | Theme resolution, stored-value validation, the pre-paint script is self-contained |
 | `library.test.ts` | Collection-name cleaning, case-insensitive grouping and counts, URL view parsing, All / collection / Archived filtering (deleted never shown) |
 
@@ -2411,6 +2451,8 @@ AI behaviour was instead verified by **live runs against the real API** during d
 
 **Platform:** Vercel, auto-deploying on every push to `main`.
 
+**Production URL:** **https://prepwise-studio.vercel.app** — the single canonical URL, defined once in `lib/site.ts` and used for `metadataBase`, Open Graph, `robots.txt` and the sitemap. The previous domain, `mock-ai-prep.vercel.app`, is kept on the project as a **307 redirect** so old links keep working. Share links are built from the visitor's own origin, so they work on preview deployments and survive any future domain change. Sign-in is email/password, which doesn't depend on Firebase's authorized-domains list (that list only matters for popup/redirect providers).
+
 ```text
 git push origin main
    │
@@ -2421,20 +2463,20 @@ git push origin main
              └─ Dynamic (ƒ): every other route — they read cookies/DB
 ```
 
-**Route sizes at last build (Next.js 15.5.27):**
+**Route sizes at last build (Next.js 15.5.29, November 2026):**
 
 | Route | Size | First Load JS |
 |---|---|---|
-| `/` | 173 B | 111 kB |
-| `/interview` | 6.22 kB | 149 kB |
-| `/interview/[id]` | 11.1 kB | 148 kB |
-| `/interview/[id]/feedback` | 2.88 kB | 143 kB |
-| `/interview/[id]/replay` | 1.86 kB | 133 kB |
-| `/resume` | 3.46 kB | 135 kB |
-| `/share/[token]` | 486 B | 106 kB |
-| `/sign-in`, `/sign-up` | ~140 B | 191 kB (286 kB on 15.2.9 → 244 kB on 15.5 → 191 kB after dropping the unused Firestore client) |
+| `/` | 4.14 kB | 144 kB |
+| `/interview` | 7.49 kB | 150 kB |
+| `/interview/[id]` | 12.8 kB | 153 kB |
+| `/interview/[id]/feedback` | 3.13 kB | 138 kB |
+| `/interview/[id]/replay` | 2.13 kB | 128 kB |
+| `/resume` | 3.77 kB | 135 kB |
+| `/share/[token]` | 166 B | 106 kB |
+| `/sign-in`, `/sign-up` | ~140 B | 186 kB (286 kB on 15.2.9 → 244 kB on 15.5 → 191 kB after dropping the unused Firestore client) |
 
-The dashboard at **173 B** is the clearest evidence the RSC strategy works — the entire progress dashboard with SVG charts ships as HTML.
+The dashboard's own route bundle grew from 173 B to 4.14 kB with the redesign: the interview-card menus and dashboard filters are client components. The progress charts are still server-rendered SVG and ship as HTML. The favicon set, `robots.txt`, sitemap and social card are all static (`○`).
 
 **A real deployment failure worth knowing:** builds once compiled successfully but Vercel **blocked the deployment** because Next.js 15.2.3 had a critical RSC vulnerability. The fix was upgrading to 15.2.9 — a reminder that a green build is not the same as a shippable artifact. A later audit found 15.2.9 itself had since picked up a critical advisory (image-optimizer RCE, fixed in 15.5.24) plus several high-severity Server Action/RSC DoS issues, so the project moved to 15.5.27, the latest 15.x.
 
@@ -2475,6 +2517,12 @@ These were all found and repaired; they're listed because the *reasoning* is mor
 **6. One collection per interview.** Collections behave like folders, not tags — enough for "one hiring loop per company", but an interview can't sit in two groups at once.
 
 **7. Not exercised live:** the delete action itself and real (audible) speech after the voice rework were verified through tests and a silent speech stand-in rather than a live run; the delete path's ownership check is the same `ownedInterview()` guard used by archive and collections, which were live-tested.
+
+**8. Content-Security-Policy is a baseline, not strict.** It blocks framing, `<base>` hijacking, plugins and cross-site form posts. A strict `script-src` would need per-request nonces (which makes every page dynamic) because of the inline pre-paint theme script and Next's inline bootstrap, and would have to allow-list jsDelivr (Monaco) and Pyodide.
+
+**9. Major dependency upgrades are pending** (AI SDK, Zod 4, Next 16, firebase-admin 14). None is exploitable as used here — see §20 — but they should be done as one planned migration.
+
+**10. Sign-in pages have no theme menu.** They follow the system theme (or a choice saved earlier in the app).
 
 ## Accepted scale limits
 
@@ -2574,7 +2622,7 @@ Threshold tuning was equally fiddly: too sensitive and one natural pause trigger
 
 The complete story, start to finish.
 
-**A new user arrives.** They hit `mock-ai-prep.vercel.app`. Vercel routes to the Next.js server. `app/(root)/layout.tsx` runs before anything renders, calls `isAuthenticated()`, finds no `session` cookie, and issues `redirect("/sign-in")`. No HTML for the app is ever generated.
+**A new user arrives.** They hit `prepwise-studio.vercel.app`. Vercel routes to the Next.js server. `app/(root)/layout.tsx` runs before anything renders, calls `isAuthenticated()`, finds no `session` cookie, and issues `redirect("/sign-in")`. No HTML for the app is ever generated.
 
 **They sign up.** `app/(auth)/layout.tsx` confirms they're logged out and renders `AuthForm` in sign-up mode. `react-hook-form` validates against a Zod schema built by `authFormSchema("sign-up")`, which requires a name. On submit, `createUserWithEmailAndPassword` sends credentials **directly to Firebase** — our server never sees the password. Firebase returns a UID, which the `signUp` server action writes to `users/{uid}` as `{ name, email }`. They're pushed to `/sign-in`.
 

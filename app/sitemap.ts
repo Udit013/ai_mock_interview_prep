@@ -1,6 +1,6 @@
 import type { MetadataRoute } from "next";
 
-const SITE_URL = "https://mock-ai-prep.vercel.app";
+import { SITE_URL } from "@/lib/site";
 
 // Only the public entry points are indexable; the rest requires an account.
 export default function sitemap(): MetadataRoute.Sitemap {

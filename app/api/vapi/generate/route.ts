@@ -7,6 +7,7 @@ import { db } from "@/firebase/admin";
 import { getCurrentUser } from "@/lib/actions/auth.action";
 import { resumeSchema, type ResumeSchema } from "@/lib/ai/resume";
 import { checkRateLimit, RATE_LIMITS } from "@/lib/rate-limit";
+import { readJsonBody } from "@/lib/http/body";
 import { getCompanyMode, companyPromptBlock } from "@/constants/companies";
 import {
   sanitizeQuestions,
@@ -116,7 +117,15 @@ export async function POST(request: Request) {
       );
     }
 
-    const parsedBody = generateBodySchema.safeParse(await request.json());
+    // A parsed résumé plus a pasted job posting is well under 100 KB.
+    const body = await readJsonBody(request, 300_000);
+    if (!body.ok) {
+      return Response.json(
+        { success: false, error: body.status === 413 ? "Request too large." : "Invalid request." },
+        { status: body.status }
+      );
+    }
+    const parsedBody = generateBodySchema.safeParse(body.value);
     if (!parsedBody.success) {
       return Response.json(
         { success: false, error: "Invalid request." },

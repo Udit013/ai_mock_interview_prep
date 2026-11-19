@@ -17,6 +17,7 @@ import {
 import { isNonAnswer, planSkipTurn } from "@/lib/interview/non-answer";
 import { getCurrentUser } from "@/lib/actions/auth.action";
 import { checkRateLimit, RATE_LIMITS } from "@/lib/rate-limit";
+import { readJsonBody } from "@/lib/http/body";
 
 // Gemini calls are capped at 45 s (lib/ai/limits.ts); leave headroom for auth
 // and Firestore. Must be a literal — Next reads it statically.
@@ -90,7 +91,15 @@ export async function POST(request: Request) {
       );
     }
 
-    const parsed = respondBodySchema.safeParse(await request.json());
+    // Largest legitimate body is ~400 KB (40 history turns × 8 000 chars).
+    const body = await readJsonBody(request, 1_000_000);
+    if (!body.ok) {
+      return Response.json(
+        { success: false, error: body.status === 413 ? "Request too large." : "Invalid request." },
+        { status: body.status }
+      );
+    }
+    const parsed = respondBodySchema.safeParse(body.value);
     if (!parsed.success) {
       return Response.json(
         { success: false, error: "Invalid request." },

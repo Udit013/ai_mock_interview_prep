@@ -4,6 +4,7 @@ import { Mona_Sans } from "next/font/google";
 import "./globals.css";
 import ThemedToaster from "@/components/ThemedToaster";
 import { NO_FLASH_SCRIPT } from "@/lib/theme";
+import { SITE_URL } from "@/lib/site";
 
 const monaSans = Mona_Sans({
   variable: "--font-mona-sans",
@@ -11,7 +12,6 @@ const monaSans = Mona_Sans({
   display: "swap",
 });
 
-const SITE_URL = "https://mock-ai-prep.vercel.app";
 const DESCRIPTION =
   "Practice job interviews with an adaptive AI interviewer. Voice interviews, live coding rounds, résumé-based questions and instant, detailed feedback — free.";
 
@@ -42,7 +42,6 @@ export const metadata: Metadata = {
     title: "PrepWise — AI Mock Interview Practice",
     description: DESCRIPTION,
   },
-  icons: { icon: "/favicon.ico" },
 };
 
 export const viewport: Viewport = {

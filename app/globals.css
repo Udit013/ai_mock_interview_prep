@@ -38,6 +38,7 @@
 
   --ink: #1a1916;
   --ink-fg: #ffffff;
+  --mark-accent: #fb923c; /* logo's accent bar: on the ink tile, not on the page */
 
   --shadow-sm: 0 1px 2px rgb(26 25 22 / 0.06);
   --shadow-lg: 0 12px 32px -8px rgb(26 25 22 / 0.18), 0 2px 6px rgb(26 25 22 / 0.06);
@@ -79,6 +80,7 @@
 
   --ink: #f2f0eb;
   --ink-fg: #121110;
+  --mark-accent: #c2410c;
 
   --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.4);
   --shadow-lg: 0 16px 40px -12px rgb(0 0 0 / 0.7), 0 2px 8px rgb(0 0 0 / 0.4);

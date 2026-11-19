@@ -8,7 +8,7 @@ export const contentType = "image/png";
 
 export default function OpenGraphImage() {
   const bar = (h: number, color: string) => (
-    <div style={{ width: 9, height: h, borderRadius: 5, background: color }} />
+    <div style={{ width: 11, height: h, borderRadius: 5.5, background: color }} />
   );
   return new ImageResponse(
     (
@@ -30,18 +30,19 @@ export default function OpenGraphImage() {
             style={{
               width: 88,
               height: 88,
-              borderRadius: 22,
+              borderRadius: 20.5,
               background: "#1a1916",
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
-              gap: 6,
+              gap: 5.5,
             }}
           >
-            {bar(22, "#ffffff")}
-            {bar(46, "#fb923c")}
-            {bar(32, "#ffffff")}
-            {bar(14, "#ffffff")}
+            {/* Same geometry as app/icon.svg, scaled 2.75× */}
+            {bar(22, "#f7f6f3")}
+            {bar(55, "#fb923c")}
+            {bar(36, "#f7f6f3")}
+            {bar(16.5, "#f7f6f3")}
           </div>
           <div style={{ fontSize: 44, fontWeight: 700, letterSpacing: -1 }}>PrepWise</div>
         </div>

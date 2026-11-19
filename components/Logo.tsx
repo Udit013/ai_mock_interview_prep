@@ -9,15 +9,16 @@ export const LogoMark = ({ size = 28, className }: { size?: number; className?: 
   <svg
     width={size}
     height={size}
-    viewBox="0 0 28 28"
+    viewBox="0 0 32 32"
     aria-hidden="true"
     className={cn("shrink-0", className)}
   >
-    <rect width="28" height="28" rx="7" style={{ fill: "var(--ink)" }} />
-    <rect x="7" y="11" width="2.6" height="6" rx="1.3" style={{ fill: "var(--ink-fg)" }} />
-    <rect x="11.4" y="7.5" width="2.6" height="13" rx="1.3" style={{ fill: "var(--brand)" }} />
-    <rect x="15.8" y="9.5" width="2.6" height="9" rx="1.3" style={{ fill: "var(--ink-fg)" }} />
-    <rect x="20.2" y="12" width="2.6" height="4" rx="1.3" style={{ fill: "var(--ink-fg)" }} />
+    {/* Same geometry as app/icon.svg (the favicon). */}
+    <rect width="32" height="32" rx="7.5" style={{ fill: "var(--ink)" }} />
+    <rect x="5" y="12" width="4" height="8" rx="2" style={{ fill: "var(--ink-fg)" }} />
+    <rect x="11" y="6" width="4" height="20" rx="2" style={{ fill: "var(--mark-accent)" }} />
+    <rect x="17" y="9.5" width="4" height="13" rx="2" style={{ fill: "var(--ink-fg)" }} />
+    <rect x="23" y="13" width="4" height="6" rx="2" style={{ fill: "var(--ink-fg)" }} />
   </svg>
 );
 
