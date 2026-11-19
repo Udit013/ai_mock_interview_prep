@@ -2132,7 +2132,7 @@ GOOGLE_GENERATIVE_AI_API_KEY=your-gemini-key
 
 The private key needs `.split(String.raw\`\n\`).join("\n")` because env vars store `\n` as two literal characters, not newlines.
 
-> **Security note:** `.env.local` was tracked in git early in this project's history and later removed from tracking with `.env*.local` added to `.gitignore`. The old key remains in git history, so **the Firebase private key should be rotated.**
+> **Security note:** `.env.local` was tracked in git early in this project's history and later removed from tracking with `.env*.local` added to `.gitignore`. The old values remain in git history, but **every one has since been revoked** (19 November 2026 — see §20), so they grant nothing.
 
 ---
 
@@ -2342,7 +2342,7 @@ Every Gemini-backed endpoint runs the same sequence, in this order:
 | Raw error messages returned from the generate route | Upstream provider errors can carry project ids and quota details | Logged server-side; a generic message is returned |
 | No request size limits | Hostile payloads could inflate prompts and drain quota | Zod bounds on every field |
 | No rate limits | One user could exhaust the daily API budget | Transactional per-user daily counters |
-| `.env.local` tracked in git | Secrets in history | Untracked + gitignored. The values remain in public history, so each one must be rotated — status below |
+| `.env.local` tracked in git | Secrets in history | Untracked + gitignored. The values remain in public history; all of them have been revoked — status below |
 | `signUp` trusted a caller-supplied uid/email, and the client sent the plaintext password | Anyone could create a profile document for an arbitrary uid; the password crossed to our server needlessly | Server derives uid/email from a verified ID token; only the token is sent |
 | `createFeedback` (a Gemini call) had **no rate limit** | A signed-in user could call the action in a loop and drain the model quota | `feedback` limit of 30/day, checked after authorization |
 | `interviewState` arrays/strings were **unbounded** | Every turn re-sends the state, so a client could grow each prompt without limit | Rejected if absurd, trimmed to 20 × 300 chars otherwise |
@@ -2395,8 +2395,8 @@ Commit `1173c62` (September 2025) added `.env.local` to this **public** reposito
 | Secret | Still in use? | Action |
 |---|---|---|
 | `FIREBASE_PRIVATE_KEY` (service account `firebase-adminsdk-fbsvc@…`) | **Rotated 19 Nov 2026** | New key installed locally and on Vercel (now stored as a *Sensitive* variable). Old key deleted in Google Cloud; Google now rejects it (`invalid-credential`). Production verified on a fresh deployment afterwards |
-| `GOOGLE_GENERATIVE_AI_API_KEY` | No — local and production use a newer key | Delete the old key in Google AI Studio if it still exists |
-| `NEXT_PUBLIC_VAPI_WEB_TOKEN` | No — Vapi is no longer used | Revoke in the Vapi dashboard |
+| `GOOGLE_GENERATIVE_AI_API_KEY` | No — local and production use a newer key | **Revoked.** The leaked key now gets `400 API key not valid` from the Gemini API (checked 19 Nov 2026) |
+| `NEXT_PUBLIC_VAPI_WEB_TOKEN` | No — Vapi is no longer used | **Revoked** in the Vapi dashboard by the owner (not independently verifiable from here) |
 
 Rewriting git history is **not** needed once each value is revoked: a revoked credential in history grants nothing, while a force-push rewrite would break every existing clone and fork.
 
@@ -2548,7 +2548,7 @@ These were all found and repaired; they're listed because the *reasoning* is mor
 
 **3. `getFeedbackByUserId` is unbounded.** Fine for tens of interviews, wasteful at hundreds. The fix (a rolling per-user stats document) is described in §24.
 
-**4. Old credentials in git history** (see §20, *Secret exposure & rotation status*). The Firebase Admin key was rotated on 19 November 2026 and the leaked one deleted. Still to do by the owner: confirm the old Gemini key is deleted in Google AI Studio and revoke the old Vapi token.
+**4. Revoked credentials remain in git history.** Commit `1173c62` still contains a since-revoked Firebase Admin key, Gemini key and Vapi token (§20). They grant nothing, and history was deliberately not rewritten, since a force-push would break existing clones and forks.
 
 **5. Filter links opened fresh land at the top.** A bookmarked `/?collection=…#your-interviews` loads with the loading skeleton first, so the browser's jump to the anchor happens before the section exists. Clicking the chips in-app is unaffected (`scroll={false}` keeps your place).
 
