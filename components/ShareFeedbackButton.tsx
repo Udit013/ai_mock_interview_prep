@@ -87,7 +87,7 @@ const ShareFeedbackButton = ({
         readOnly
         value={shareUrl ?? ""}
         onFocus={(e) => e.currentTarget.select()}
-        className="w-full rounded-full border border-white/10 bg-dark-200 px-5 py-3 text-sm text-light-100"
+        className="w-full rounded-full border border-line bg-dark-200 px-5 py-3 text-sm text-light-100"
       />
       <div className="flex flex-wrap items-center gap-3">
         <Button

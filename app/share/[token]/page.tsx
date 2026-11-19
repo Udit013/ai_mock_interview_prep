@@ -36,7 +36,7 @@ const Page = async ({ params }: RouteParams) => {
 
   const scoreColor = (score: number) => {
     if (score >= 80) return "text-success-100";
-    if (score >= 60) return "text-yellow-400";
+    if (score >= 60) return "text-warning";
     return "text-destructive-100";
   };
 
@@ -73,7 +73,7 @@ const Page = async ({ params }: RouteParams) => {
                   score >= 80
                     ? "bg-success-100"
                     : score >= 60
-                    ? "bg-yellow-400"
+                    ? "bg-warning"
                     : "bg-destructive-100"
                 )}
                 style={{ width: `${score}%` }}

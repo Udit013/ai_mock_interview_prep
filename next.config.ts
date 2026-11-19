@@ -41,6 +41,14 @@ const nextConfig: NextConfig = {
             key: "Permissions-Policy",
             value: "microphone=(self), camera=(), geolocation=()",
           },
+          // A CSP subset that can't break the app: no framing, no plugins,
+          // no <base> hijacking, forms only post back to us. Script/style
+          // sources are left open because Monaco, Pyodide and Firebase load
+          // from CDNs; tightening those needs per-request nonces.
+          {
+            key: "Content-Security-Policy",
+            value: "frame-ancestors 'none'; base-uri 'self'; object-src 'none'; form-action 'self'",
+          },
           // HSTS is already sent by Vercel on every deployment.
         ],
       },

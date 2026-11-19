@@ -216,7 +216,7 @@ const InterviewCardMenu = ({
             onChange={(e) => setCollectionInput(e.target.value)}
             placeholder="e.g. Stripe loop, FAANG prep"
             autoComplete="off"
-            className="w-full rounded-full border border-white/10 bg-dark-200 px-5 py-3 text-sm text-white placeholder:text-light-400"
+            className="field"
           />
           <datalist id={`${ids}-collections`}>
             {collections.map((c) => (

@@ -41,7 +41,7 @@ const Page = async () => {
                 <li key={title} className="flex items-start gap-3">
                   <span aria-hidden="true" className="mt-0.5 text-success-100">✓</span>
                   <p>
-                    <strong className="text-white">{title}</strong> — {text}
+                    <strong className="text-fg">{title}</strong> — {text}
                   </p>
                 </li>
               ))}
@@ -74,7 +74,7 @@ const Page = async () => {
         {resume.skills.slice(0, 14).map((s) => (
           <li
             key={s}
-            className="rounded-full border border-white/5 bg-dark-300 px-3 py-1 text-xs text-light-100"
+            className="rounded-full border border-line bg-dark-300 px-3 py-1 text-xs text-light-100"
           >
             {s}
           </li>

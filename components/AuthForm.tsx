@@ -6,13 +6,13 @@ import { z } from "zod"
 
 import { Button } from "@/components/ui/button"
 import { Form} from "@/components/ui/form"
-import Image from "next/image";
 import Link from "next/link";
 import {toast} from "sonner";
 import FormField from "@/components/FormField";
 import {useRouter} from "next/navigation";
 import {createUserWithEmailAndPassword, signInWithEmailAndPassword} from "firebase/auth";
 import {auth} from "@/firebase/client";
+import Logo from "@/components/Logo";
 import {signIn, signUp} from "@/lib/actions/auth.action";
 
 const authFormSchema = (type: FormType) => {
@@ -115,14 +115,8 @@ const AuthForm = ({ type }: { type: FormType }) => {
     return (
         <div className="card-border w-full max-w-[566px] fade-up">
             <div className="flex flex-col gap-6 card py-14 px-10 max-sm:py-10 max-sm:px-6">
-                <div className="flex flex-row gap-2 justify-center">
-                    <Image
-                        src="/logo.svg"
-                        alt=""
-                        height={32}
-                        width={38}
-                    />
-                    <span className="text-primary-100 text-3xl font-semibold">PrepWise</span>
+                <div className="flex justify-center">
+                    <Logo size={32} />
                 </div>
 
                 <h1 className="text-2xl font-semibold text-center text-balance">

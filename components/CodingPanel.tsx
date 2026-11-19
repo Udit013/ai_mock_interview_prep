@@ -1,4 +1,5 @@
 "use client";
+import { useResolvedTheme } from "@/hooks/useResolvedTheme";
 
 import { useState } from "react";
 import dynamic from "next/dynamic";
@@ -54,6 +55,7 @@ const CodingPanel = ({
   onSubmit,
   interviewActive,
 }: CodingPanelProps) => {
+  const editorTheme = useResolvedTheme();
   const [value, setValue] = useState(STARTER[language]);
   const [running, setRunning] = useState(false);
   const [result, setResult] = useState<RunResult | null>(null);
@@ -94,7 +96,7 @@ const CodingPanel = ({
             onCodeChange(STARTER[next]);
             setResult(null);
           }}
-          className="input bg-dark-200 text-white border border-dark-300 rounded-lg px-3 py-1.5 text-sm"
+          className="input bg-dark-200 text-fg border border-dark-300 rounded-lg px-3 py-1.5 text-sm"
         >
           {LANGUAGES.map((l) => (
             <option key={l.id} value={l.id}>
@@ -153,7 +155,7 @@ const CodingPanel = ({
           height="380px"
           language={language}
           value={value}
-          theme="vs-dark"
+          theme={editorTheme === "dark" ? "vs-dark" : "light"}
           onChange={(v) => {
             setValue(v ?? "");
             onCodeChange(v ?? "");

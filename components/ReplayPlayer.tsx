@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import Image from "next/image";
 import { cn } from "@/lib/utils";
+import { LogoMark } from "@/components/Logo";
+import { monogram } from "@/lib/interview/company";
 
 interface ReplayPlayerProps {
   transcript: { role: string; content: string }[];
@@ -23,7 +24,7 @@ const ReplayContent = ({ content }: { content: string }) => {
     <>
       <p>{spoken}</p>
       {problem && (
-        <div className="mt-3 rounded-lg border border-white/10 bg-dark-200/60 px-3 py-2">
+        <div className="mt-3 rounded-lg border border-line bg-dark-200/60 px-3 py-2">
           <p className="text-xs font-semibold uppercase tracking-wide text-light-400 mb-1">
             Problem shown on screen
           </p>
@@ -103,7 +104,7 @@ const ReplayPlayer = ({ transcript, userName, finalCode }: ReplayPlayerProps) =>
               setPlaying(false);
               setVisibleCount(transcript.length);
             }}
-            className="text-sm text-light-400 hover:text-white transition-colors"
+            className="text-sm text-light-400 hover:text-fg transition-colors"
           >
             Skip to end
           </button>
@@ -113,7 +114,7 @@ const ReplayPlayer = ({ transcript, userName, finalCode }: ReplayPlayerProps) =>
         </span>
       </div>
 
-      <div className="flex flex-col gap-4 rounded-2xl border border-dark-300 bg-dark-200/40 p-6 max-h-[60vh] overflow-y-auto">
+      <div className="flex max-h-[60vh] flex-col gap-4 overflow-y-auto rounded-xl border border-line bg-surface p-6">
         {shown.map((m, i) => {
           const isUser = m.role === "user";
           return (
@@ -124,19 +125,20 @@ const ReplayPlayer = ({ transcript, userName, finalCode }: ReplayPlayerProps) =>
                 isUser && "flex-row-reverse"
               )}
             >
-              <Image
-                src={isUser ? "/user-avatar.svg" : "/ai-avatar.png"}
-                alt={isUser ? userName : "AI Interviewer"}
-                width={36}
-                height={36}
-                className="rounded-full object-cover size-9 shrink-0 mt-1"
-              />
+              {isUser ? (
+                <span
+                  aria-hidden="true"
+                  className="mt-1 flex size-8 shrink-0 items-center justify-center rounded-full border border-line bg-surface-2 text-xs font-semibold text-fg-soft"
+                >
+                  {monogram(userName || "You")}
+                </span>
+              ) : (
+                <LogoMark size={32} className="mt-1" />
+              )}
               <div
                 className={cn(
-                  "max-w-[80%] rounded-2xl px-4 py-3 text-sm leading-relaxed",
-                  isUser
-                    ? "bg-primary-200/15 border border-primary-200/30"
-                    : "bg-dark-300"
+                  "max-w-[80%] rounded-xl border px-4 py-3 text-sm leading-relaxed",
+                  isUser ? "border-line bg-surface-3" : "border-line bg-surface-2"
                 )}
               >
                 <p className="text-xs text-light-400 mb-1">
@@ -153,7 +155,7 @@ const ReplayPlayer = ({ transcript, userName, finalCode }: ReplayPlayerProps) =>
       {finalCode && visibleCount >= transcript.length && (
         <div className="flex flex-col gap-2 replay-message">
           <h3 className="text-lg">Submitted code ({finalCode.language})</h3>
-          <pre className="rounded-xl border border-dark-300 bg-dark-300/60 p-4 text-sm overflow-x-auto">
+          <pre className="overflow-x-auto rounded-xl border border-line bg-surface-2 p-4 text-sm">
             <code>{finalCode.code}</code>
           </pre>
         </div>

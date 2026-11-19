@@ -2,7 +2,6 @@ import React from "react";
 import type { Metadata } from "next";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
-import Image from "next/image";
 import InterviewCard from "@/components/InterviewCard";
 import ProgressOverview from "@/components/dashboard/ProgressOverview";
 import { getCurrentUser } from "@/lib/actions/auth.action";
@@ -51,33 +50,33 @@ const Page = async ({ searchParams }: RouteParams) => {
   const showFilters = collections.length > 0 || archivedCount > 0;
 
   const hasUserInterviews = userInterviews.length > 0;
+  const firstName = user?.name?.trim().split(/\s+/)[0] ?? "";
   const hasLatestInterviews = latestInterviews.length > 0;
 
   return (
     <>
-      <section className="card-cta">
-        <div className="flex flex-col gap-6 max-w-lg flex-1 min-w-0">
-          <span className="eyebrow">AI interview coach</span>
+      <section className="flex flex-col gap-6 border-b border-line pb-8 sm:flex-row sm:items-end sm:justify-between">
+        <div className="flex max-w-2xl flex-col gap-3">
+          <p className="eyebrow">Dashboard</p>
           <h1 className="hero-title">
-            Get interview-ready with AI-powered practice &amp; feedback
+            {firstName ? `Welcome back, ${firstName}.` : "Welcome back."}
           </h1>
-          <p className="text-lg text-light-100/90">
-            Adaptive voice interviews, live coding rounds and detailed scoring
-            — practice on real questions and see exactly what to improve.
+          <p className="text-base text-fg-muted">
+            {progress.totalInterviews === 0
+              ? "Run a realistic mock interview — voice, coding, or tailored to a job posting — and get scored, specific feedback in minutes."
+              : progress.weakest
+              ? `${progress.totalInterviews} interview${progress.totalInterviews === 1 ? "" : "s"} scored, averaging ${progress.averageScore}. Your next focus: ${progress.weakest.name}.`
+              : `${progress.totalInterviews} interview${progress.totalInterviews === 1 ? "" : "s"} scored, averaging ${progress.averageScore}.`}
           </p>
+        </div>
+        <div className="flex shrink-0 flex-wrap gap-3 max-sm:flex-col">
           <Button asChild className="btn-primary max-sm:w-full">
-            <Link href="/interview">Start an Interview</Link>
+            <Link href="/interview">New interview</Link>
+          </Button>
+          <Button asChild className="btn-secondary max-sm:w-full">
+            <Link href="/resume">Résumé Coach</Link>
           </Button>
         </div>
-
-        <Image
-          src="/robot.png"
-          alt=""
-          width={400}
-          height={400}
-          priority
-          className="max-md:hidden shrink-0 w-[clamp(220px,30vw,400px)] h-auto float-slow drop-shadow-[0_20px_60px_rgba(202,197,254,0.25)]"
-        />
       </section>
 
       {progress.totalInterviews > 0 && (

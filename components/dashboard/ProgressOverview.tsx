@@ -87,7 +87,7 @@ const CompetencyBars = ({ items }: { items: CompetencyScore[] }) => {
     score >= 80
       ? "bg-success-100"
       : score >= 60
-      ? "bg-yellow-400"
+      ? "bg-warning"
       : "bg-destructive-100";
 
   return (
@@ -113,22 +113,25 @@ const CompetencyBars = ({ items }: { items: CompetencyScore[] }) => {
 const StatCard = ({
   value,
   label,
-  accent,
+  tone = "default",
 }: {
   value: string;
   label: string;
-  accent?: boolean;
+  tone?: "default" | "accent" | "good" | "bad";
 }) => (
-  <div className="flex flex-col gap-1 rounded-lg border border-dark-300 bg-dark-200 px-5 py-4 min-w-[130px] flex-1">
+  <div className="flex min-w-[130px] flex-1 flex-col gap-1 rounded-lg border border-line bg-surface-2 px-4 py-3">
     <span
       className={cn(
-        "text-3xl font-bold",
-        accent ? "text-primary-100" : "text-white"
+        "num text-2xl font-semibold",
+        tone === "accent" && "text-primary-100",
+        tone === "good" && "text-success-100",
+        tone === "bad" && "text-destructive-100",
+        tone === "default" && "text-fg"
       )}
     >
       {value}
     </span>
-    <span className="text-xs text-light-400">{label}</span>
+    <span className="text-xs text-fg-muted">{label}</span>
   </div>
 );
 
@@ -150,7 +153,7 @@ const ProgressOverview = ({ progress }: { progress: UserProgress }) => {
       : `${recentImprovement >= 0 ? "+" : ""}${recentImprovement}`;
 
   return (
-    <section className="flex flex-col gap-6 rounded-2xl border border-dark-300 bg-dark-200/40 p-6">
+    <section className="flex flex-col gap-6 rounded-xl border border-line bg-surface p-6 shadow-[var(--shadow-sm)]">
       <div className="flex flex-col gap-1">
         <h2>Your Progress</h2>
         <p className="text-light-400">
@@ -160,15 +163,21 @@ const ProgressOverview = ({ progress }: { progress: UserProgress }) => {
 
       <div className="flex flex-wrap gap-4">
         <StatCard value={`${totalInterviews}`} label="Interviews completed" />
-        <StatCard value={`${averageScore}`} label="Average score" accent />
+        <StatCard value={`${averageScore}`} label="Average score" tone="accent" />
         <StatCard
-          value={`${currentStreak}🔥`}
-          label={`Day streak`}
+          value={`${currentStreak}`}
+          label={currentStreak === 1 ? "Day streak" : "Days in a row"}
         />
         <StatCard
           value={improvementLabel}
-          label="Recent improvement"
-          accent={recentImprovement !== null && recentImprovement >= 0}
+          label="Change vs. earlier average"
+          tone={
+            recentImprovement === null || recentImprovement === 0
+              ? "default"
+              : recentImprovement > 0
+              ? "good"
+              : "bad"
+          }
         />
       </div>
 

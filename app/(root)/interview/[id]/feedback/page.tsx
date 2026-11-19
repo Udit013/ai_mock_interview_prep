@@ -2,7 +2,6 @@ import type { Metadata } from "next";
 import React from "react";
 import { redirect } from "next/navigation";
 import Link from "next/link";
-import Image from "next/image";
 import dayjs from "dayjs";
 import { getCurrentUser } from "@/lib/actions/auth.action";
 import {
@@ -38,7 +37,7 @@ const Page = async ({ params }: RouteParams) => {
 
   const scoreColor = (score: number) => {
     if (score >= 80) return "text-success-100";
-    if (score >= 60) return "text-yellow-400";
+    if (score >= 60) return "text-warning";
     return "text-destructive-100";
   };
 
@@ -46,26 +45,26 @@ const Page = async ({ params }: RouteParams) => {
     <section className="section-feedback">
       <Link
         href="/"
-        className="w-fit text-sm text-light-400 transition-colors hover:text-white"
+        className="w-fit text-sm text-light-400 transition-colors hover:text-fg"
       >
         <span aria-hidden="true">←</span> Dashboard
       </Link>
 
-      <header className="flex items-center gap-6 rounded-3xl border border-primary-200/10 blue-gradient-dark p-6 shadow-[0_30px_80px_-50px_rgba(202,197,254,0.5)] max-sm:flex-col max-sm:text-center sm:p-8">
+      <header className="flex items-center gap-6 rounded-xl border border-line bg-surface p-6 shadow-[var(--shadow-sm)] max-sm:flex-col max-sm:text-center sm:p-8">
         <ScoreRing score={feedback.totalScore} />
         <div className="flex flex-col gap-2 max-sm:items-center">
           <p className="eyebrow">Interview feedback</p>
           <h1 className="page-title capitalize">
             {interview.role} interview
+            {interview.companyName ? (
+              <span className="font-normal text-fg-muted normal-case"> · {interview.companyName}</span>
+            ) : null}
           </h1>
-          <p className="flex items-center gap-2 text-sm text-light-400">
-            <Image src="/calendar.svg" alt="" width={18} height={18} />
-            {formattedDate}
-          </p>
+          <p className="text-sm text-fg-muted">{formattedDate}</p>
         </div>
       </header>
 
-      <hr className="border-dark-300" />
+      <hr className="border-line" />
 
       <section>
         <h2 className="text-2xl">Breakdown by Category</h2>
@@ -92,7 +91,7 @@ const Page = async ({ params }: RouteParams) => {
                     score >= 80
                       ? "bg-success-100"
                       : score >= 60
-                      ? "bg-yellow-400"
+                      ? "bg-warning"
                       : "bg-destructive-100"
                   )}
                   style={{ width: `${score}%` }}
@@ -104,7 +103,7 @@ const Page = async ({ params }: RouteParams) => {
         </div>
       </section>
 
-      <hr className="border-dark-300" />
+      <hr className="border-line" />
 
       <section className="flex flex-col gap-4">
         <h2 className="text-2xl">Strengths</h2>
@@ -118,7 +117,7 @@ const Page = async ({ params }: RouteParams) => {
         </ul>
       </section>
 
-      <hr className="border-dark-300" />
+      <hr className="border-line" />
 
       <section className="flex flex-col gap-4">
         <h2 className="text-2xl">Areas for Improvement</h2>
@@ -134,7 +133,7 @@ const Page = async ({ params }: RouteParams) => {
 
       {feedback.speakingAnalytics && (
         <>
-          <hr className="border-dark-300" />
+          <hr className="border-line" />
           <section className="flex flex-col gap-4">
             <h2 className="text-2xl">Speaking Analytics</h2>
             <div className="flex flex-wrap gap-4">
@@ -197,7 +196,7 @@ const Page = async ({ params }: RouteParams) => {
 
       {feedback.starCompleteness && (
         <>
-          <hr className="border-dark-300" />
+          <hr className="border-line" />
           <section className="flex flex-col gap-4">
             <h2 className="text-2xl">STAR Method Completeness</h2>
             <div className="flex flex-wrap gap-3">
@@ -230,14 +229,14 @@ const Page = async ({ params }: RouteParams) => {
         </>
       )}
 
-      <hr className="border-dark-300" />
+      <hr className="border-line" />
 
       <section className="flex flex-col gap-4">
         <h2 className="text-2xl">Final Assessment</h2>
         <p className="text-light-400">{feedback.finalAssessment}</p>
       </section>
 
-      <hr className="border-dark-300" />
+      <hr className="border-line" />
 
       <section className="flex flex-col gap-3">
         <h2 className="text-2xl">Share</h2>
@@ -253,23 +252,17 @@ const Page = async ({ params }: RouteParams) => {
 
       <div className="buttons">
         <Button asChild className="btn-secondary flex-1">
-          <Link href="/">
-            <Image src="/logo.svg" alt="" width={20} height={20} />
-            Back to Dashboard
-          </Link>
+          <Link href="/">Back to dashboard</Link>
         </Button>
 
         {feedback.transcript && feedback.transcript.length > 0 && (
           <Button asChild className="btn-secondary flex-1">
-            <Link href={`/interview/${id}/replay`}>▶ Watch Replay</Link>
+            <Link href={`/interview/${id}/replay`}>Watch replay</Link>
           </Button>
         )}
 
         <Button asChild className="btn-primary flex-1">
-          <Link href={`/interview/${id}`}>
-            <Image src="/user-avatar.svg" alt="retry" width={20} height={20} />
-            Retake Interview
-          </Link>
+          <Link href={`/interview/${id}`}>Retake interview</Link>
         </Button>
       </div>
     </section>

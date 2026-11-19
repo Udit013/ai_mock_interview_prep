@@ -1,9 +1,10 @@
 import { ReactNode } from "react";
 import Link from "next/link";
-import Image from "next/image";
 import { redirect } from "next/navigation";
 import { isAuthenticated, signOut } from "@/lib/actions/auth.action";
 import NavLinks from "@/components/NavLinks";
+import ThemeToggle from "@/components/ThemeToggle";
+import { LogoMark } from "@/components/Logo";
 
 const RootLayout = async ({ children }: { children: ReactNode }) => {
   const isUserAuthenticated = await isAuthenticated();
@@ -21,14 +22,15 @@ const RootLayout = async ({ children }: { children: ReactNode }) => {
             className="flex shrink-0 items-center gap-2 rounded-lg"
             aria-label="PrepWise home"
           >
-            <Image src="/logo.svg" alt="" width={38} height={32} priority className="max-sm:w-8 h-auto" />
-            <span className="text-primary-100 text-xl sm:text-2xl lg:text-3xl font-semibold">
+            <LogoMark size={28} />
+            <span className="text-fg text-lg font-semibold tracking-tight max-sm:hidden">
               PrepWise
             </span>
           </Link>
 
           <div className="flex items-center gap-1 sm:gap-2">
             <NavLinks />
+            <ThemeToggle />
 
             <form
               action={async () => {

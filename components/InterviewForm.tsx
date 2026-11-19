@@ -320,7 +320,7 @@ const InterviewForm = () => {
                         {...field}
                         rows={6}
                         placeholder="Paste the job posting — responsibilities, requirements, nice-to-haves…"
-                        className="w-full resize-y rounded-2xl border border-white/5 bg-dark-200 px-5 py-4 text-sm leading-relaxed text-white placeholder:text-light-400 transition-colors hover:border-white/15 focus-visible:border-primary-200/60"
+                        className="field resize-y py-3 leading-relaxed placeholder:text-fg-muted"
                       />
                     </FormControl>
                     <div className="flex items-start justify-between gap-4">
@@ -356,7 +356,7 @@ const InterviewForm = () => {
                 <select
                   id="interview-level"
                   {...form.register("level")}
-                  className="input bg-dark-200 text-white border border-white/5 rounded-full min-h-12 px-5 cursor-pointer transition-colors hover:border-white/15"
+                  className="field cursor-pointer"
                 >
                   <option value="Junior">Junior</option>
                   <option value="Mid">Mid-level</option>
@@ -369,7 +369,7 @@ const InterviewForm = () => {
                 <select
                   id="interview-type"
                   {...form.register("type")}
-                  className="input bg-dark-200 text-white border border-white/5 rounded-full min-h-12 px-5 cursor-pointer transition-colors hover:border-white/15"
+                  className="field cursor-pointer"
                 >
                   <option value="Technical">Technical</option>
                   <option value="Behavioral">Behavioral</option>
@@ -386,7 +386,7 @@ const InterviewForm = () => {
                 id="interview-company"
                 aria-describedby="interview-company-hint"
                 {...form.register("companyMode")}
-                className="input bg-dark-200 text-white border border-white/5 rounded-full min-h-12 px-5 cursor-pointer transition-colors hover:border-white/15"
+                className="field cursor-pointer"
               >
                 <option value="">Generic interview</option>
                 <optgroup label="Software">

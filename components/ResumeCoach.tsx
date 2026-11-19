@@ -59,13 +59,17 @@ const ResumeCoach = () => {
             {result.bulletRewrites.map((r, i) => (
               <div
                 key={i}
-                className="flex flex-col gap-2 rounded-xl border border-dark-300 bg-dark-200/40 p-4"
+                className="grid gap-3 rounded-xl border border-line bg-surface p-4 sm:grid-cols-[4.5rem_1fr]"
               >
-                <p className="text-sm text-destructive-100 line-through decoration-destructive-100/50">
+                <p className="eyebrow !text-fg-muted pt-0.5">Before</p>
+                <p className="text-sm text-fg-muted line-through decoration-fg-muted/40">
                   {r.before}
                 </p>
-                <p className="text-sm text-success-100">{r.after}</p>
-                <p className="text-xs text-light-400">{r.why}</p>
+                <p className="eyebrow pt-0.5">After</p>
+                <div className="flex flex-col gap-1.5">
+                  <p className="text-sm font-medium leading-relaxed text-fg">{r.after}</p>
+                  <p className="text-xs text-fg-muted">{r.why}</p>
+                </div>
               </div>
             ))}
           </section>
@@ -73,11 +77,11 @@ const ResumeCoach = () => {
           {result.missingElements.length > 0 && (
             <section className="flex flex-col gap-2">
               <h3>What&apos;s missing</h3>
-              <ul className="flex flex-col gap-1">
+              <ul className="flex list-none flex-col gap-1.5 p-0">
                 {result.missingElements.map((m, i) => (
-                  <li key={i} className="flex gap-2 items-start">
-                    <span className="text-destructive-100 mt-1">→</span>
-                    <p className="text-light-400">{m}</p>
+                  <li key={i} className="flex items-start gap-2.5">
+                    <span className="mt-2.5 size-1.5 shrink-0 rounded-full bg-primary-200" aria-hidden="true" />
+                    <p className="text-fg-soft">{m}</p>
                   </li>
                 ))}
               </ul>
@@ -91,7 +95,7 @@ const ResumeCoach = () => {
                 {result.atsKeywords.map((k) => (
                   <span
                     key={k}
-                    className="rounded-full bg-dark-300 px-3 py-1 text-xs"
+                    className="rounded-md border border-line bg-surface px-2.5 py-1 text-xs text-fg-soft"
                   >
                     {k}
                   </span>

@@ -49,7 +49,7 @@ const Page = async ({ params, searchParams }: RouteParams) => {
     <>
       <Link
         href="/"
-        className="w-fit text-sm text-light-400 transition-colors hover:text-white"
+        className="w-fit text-sm text-light-400 transition-colors hover:text-fg"
       >
         <span aria-hidden="true">←</span> Dashboard
       </Link>

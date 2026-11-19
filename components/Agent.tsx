@@ -1,6 +1,5 @@
 "use client";
 
-import Image from "next/image";
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
@@ -16,6 +15,8 @@ import {
   type SpeechTiming,
 } from "@/hooks/useSpeechRecognition";
 import { buildOpening } from "@/lib/interview/conversation";
+import { LogoMark } from "@/components/Logo";
+import { monogram } from "@/lib/interview/company";
 import { cleanSpokenText, splitIntoUtterances } from "@/lib/interview/speech-text";
 import {
   postInterviewTurn,
@@ -614,7 +615,7 @@ const Agent = ({
           type="button"
           onClick={() => speech.editTranscript("")}
           disabled={!speech.transcript}
-          className="text-xs text-light-400 hover:text-white transition-colors disabled:opacity-40"
+          className="text-xs text-light-400 hover:text-fg transition-colors disabled:opacity-40"
         >
           Clear
         </button>
@@ -676,19 +677,11 @@ const Agent = ({
   // Compact layout: a slim voice bar for the split-screen coding interview.
   if (compact) {
     return (
-      <div className="flex flex-col gap-3 rounded-2xl border border-dark-300 bg-dark-200/40 p-4">
+      <div className="flex flex-col gap-3 rounded-xl border border-line bg-surface p-4">
         <div className="flex items-center gap-3">
           <div className="relative shrink-0">
-            <Image
-              src="/ai-avatar.png"
-              alt=""
-              width={40}
-              height={40}
-              className="rounded-full object-cover size-10 bg-dark-300 p-1.5"
-            />
-            {(isSpeaking || isProcessing) && (
-              <span className="absolute -bottom-0.5 -right-0.5 size-3 rounded-full bg-primary-200 animate-pulse" />
-            )}
+            <LogoMark size={36} />
+            {(isSpeaking || isProcessing) && <span className="animate-speak" />}
           </div>
 
           <div className="min-w-0 flex-1">
@@ -719,17 +712,18 @@ const Agent = ({
         {/* AI card */}
         <div className="card-interviewer">
           <div className="avatar">
-            <Image
-              src="/ai-avatar.png"
-              alt=""
-              width={65}
-              height={54}
-              className="object-cover"
-            />
+            <LogoMark size={44} />
             {(isSpeaking || isProcessing) && <span className="animate-speak" />}
           </div>
           <h3>AI Interviewer</h3>
-          <p className="text-sm text-light-400 mt-1" aria-live="polite">
+          <p className="mt-1 inline-flex items-center gap-2 text-sm text-fg-muted" aria-live="polite">
+            {isSpeaking && (
+              <span className="speaking-bars" aria-hidden="true">
+                <span />
+                <span />
+                <span />
+              </span>
+            )}
             {statusLabel}
           </p>
           {skipButton}
@@ -738,17 +732,17 @@ const Agent = ({
         {/* User card */}
         <div className="card-border">
           <div className="card-content">
-            <Image
-              src="/user-avatar.svg"
-              alt=""
-              width={540}
-              height={540}
-              className="rounded-full object-cover size-[120px]"
-            />
+            <div className="avatar">
+              <span className="text-2xl font-semibold text-fg-soft" aria-hidden="true">
+                {monogram(userName || "You")}
+              </span>
+              {isListening && <span className="animate-speak" />}
+            </div>
             <h3>{userName}</h3>
             {isListening && (
-              <p className="text-sm text-success-100 mt-1 animate-pulse">
-                🎤 Listening…
+              <p className="mt-1 inline-flex items-center gap-2 text-sm text-fg-soft">
+                <span className="live-dot" aria-hidden="true" />
+                Listening
               </p>
             )}
           </div>

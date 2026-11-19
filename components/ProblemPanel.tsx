@@ -39,7 +39,7 @@ const ProblemPanel = ({
                   "size-7 rounded-md text-xs font-medium transition-colors",
                   i === safeIndex
                     ? "bg-primary-200 text-dark-100"
-                    : "bg-dark-300 text-light-400 hover:text-white"
+                    : "bg-dark-300 text-light-400 hover:text-fg"
                 )}
               >
                 {i + 1}

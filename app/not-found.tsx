@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import Image from "next/image";
+import { LogoMark } from "@/components/Logo";
 import { Button } from "@/components/ui/button";
 
 export const metadata: Metadata = { title: "Page not found" };
@@ -10,7 +10,7 @@ const NotFound = () => (
     id="main-content"
     className="mx-auto flex min-h-screen max-w-xl flex-col items-center justify-center gap-6 px-6 py-16 text-center"
   >
-    <Image src="/logo.svg" alt="" width={56} height={48} priority />
+    <LogoMark size={44} />
     <p className="eyebrow">Error 404</p>
     <h1 className="page-title">We couldn&apos;t find that page</h1>
     <p className="text-light-400">

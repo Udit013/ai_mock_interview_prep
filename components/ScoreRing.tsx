@@ -4,7 +4,7 @@ const tone = (score: number) =>
   score >= 80
     ? { stroke: "stroke-success-100", text: "text-success-100", label: "Strong" }
     : score >= 60
-    ? { stroke: "stroke-yellow-400", text: "text-yellow-400", label: "Solid" }
+    ? { stroke: "stroke-warning", text: "text-warning", label: "Solid" }
     : { stroke: "stroke-destructive-100", text: "text-destructive-100", label: "Needs work" };
 
 /** Dependency-free circular score gauge; fills in on load. */
@@ -22,7 +22,7 @@ const ScoreRing = ({ score, size = 148 }: { score: number; size?: number }) => {
       style={{ width: size, height: size }}
     >
       <svg viewBox="0 0 120 120" className="size-full -rotate-90" aria-hidden="true">
-        <circle cx="60" cy="60" r={r} fill="none" strokeWidth="9" className="stroke-white/10" />
+        <circle cx="60" cy="60" r={r} fill="none" strokeWidth="9" className="stroke-line" />
         <circle
           cx="60"
           cy="60"

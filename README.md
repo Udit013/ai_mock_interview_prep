@@ -29,6 +29,12 @@ A full-stack, AI-powered interview platform that conducts **adaptive voice inter
 - Upload a **PDF résumé**; text is extracted with `unpdf` (serverless, no native deps) and structured by Gemini into skills, projects, experiences, and technologies.
 - Questions reference your **actual experience** — e.g. *"Why did you choose DeBERTa over BERT in your Aphasia Detection project?"* or *"Walk me through the deployment architecture of RxFlow."*
 
+### Light & Dark Themes
+- A restrained "paper & ink" design in **light and dark**, following your system setting by default, with a remembered manual choice and no flash on load. Every text colour meets **WCAG AA** contrast in both themes.
+
+### Resilient AI
+- When Gemini is overloaded, requests **back off with jitter, then fail over** to another free model; quota or retired models fail over immediately — all within a fixed time budget. Users get a clear message with **Try again**, never raw provider errors, and a failed feedback step keeps your interview so you can retry.
+
 ### Natural, Interruptible Voice
 - **Skip, answer now** stops the interviewer mid-sentence and goes straight to your answer.
 - Replies are checked before they're spoken: a malformed one (e.g. a model repetition loop) is regenerated, or replaced by a natural scripted transition — you never hear garbage. Speech plays sentence by sentence with a stall guard, and answers send after 3 seconds of silence.

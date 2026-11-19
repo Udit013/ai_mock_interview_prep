@@ -351,7 +351,7 @@ ai_mock_interview_prep/
 ├── hooks/
 │   └── useSpeechRecognition.ts   # ★ Robust browser speech-to-text
 │
-├── tests/                        # Vitest — 19 files, 208 tests
+├── tests/                        # Vitest — 21 files, 224 tests
 ├── public/                       # Static assets (avatars, icons — no brand logos)
 └── .github/workflows/ci.yml      # Typecheck + lint + tests on push/PR
 ```
@@ -824,7 +824,7 @@ Every Gemini call in the app, and the schema that guards it.
 | Résumé structuring | `generateObject` | model chain (§8) | `resumeSchema` |
 | Résumé coaching | `generateObject` | model chain (§8) | `resumeImprovementSchema` |
 
-> **Model note — `lib/ai/models.ts`.** Every call goes through `withModelFallback(task, call)`, which walks a short chain of models and moves to the next one only on quota exhaustion (429) or a retired model id (404); timeouts and bad requests are rethrown. Free-tier quotas are per model, so the chain multiplies capacity.
+> **Model note — `lib/ai/models.ts`.** Every call goes through `withModelFallback(task, call)`, which walks a short chain of models: overloads (503) are retried with backoff then failed over, quota exhaustion (429) and retired model ids (404) fail over immediately, and timeouts and bad requests are rethrown — see §8.7. Free-tier quotas are per model, so the chain multiplies capacity.
 >
 > | Slot | Env var | Default | Free tier (RPM / RPD) |
 > |---|---|---|---|
@@ -832,7 +832,7 @@ Every Gemini call in the app, and the schema that guards it.
 > | Fallback | `GEMINI_FALLBACK_MODEL` | `gemini-3.1-flash-lite` | 15 / 500 |
 > | Quality (generation + feedback only) | `GEMINI_QUALITY_MODEL` | unset | e.g. `gemini-3.8-flash`: 5 / 20 |
 >
-> History: the project started on `gemini-2.0-flash` (zero free quota on newer keys), moved to `gemini-2.5-flash`, then hit its **20 requests/day** project-wide cap during testing — about 1–2 interviews a day for all users combined. Measured on this project: Flash-Lite generated a question set in ~2.5 s (vs 8–10 s) and answered live turns in ~2–2.5 s (vs 4–7 s). `gemini-3.8-flash` was not made the default quality model because it "thinks" first: 7 s on a tiny prompt and over the 45 s timeout on the full generation prompt. Set `none` to disable the fallback or quality slot; the main slot can't be disabled. SDK retries are capped at 1 per model (`MODEL_MAX_RETRIES`) because the next model is a better retry than the same exhausted one.
+> History: the project started on `gemini-2.0-flash` (zero free quota on newer keys), moved to `gemini-2.5-flash`, then hit its **20 requests/day** project-wide cap during testing — about 1–2 interviews a day for all users combined. Measured on this project: Flash-Lite generated a question set in ~2.5 s (vs 8–10 s) and answered live turns in ~2–2.5 s (vs 4–7 s). `gemini-3.8-flash` was not made the default quality model because it "thinks" first: 7 s on a tiny prompt and over the 45 s timeout on the full generation prompt. Set `none` to disable the fallback or quality slot; the main slot can't be disabled. SDK-level retries are off (`MODEL_MAX_RETRIES = 0`): the fallback loop owns retrying, so attempts don't multiply.
 
 ## 8.1 The Adaptive Interview Engine — `lib/ai/adaptive.ts`
 
@@ -1096,6 +1096,27 @@ Defence in depth, cheapest first:
 | `cleanSpokenText` | Strips markdown, collapses `,,,,` → `,`, and caps at 600 characters — ending on the question where possible |
 | Client: chunked speech + **Skip, answer now** | The candidate can always cut the interviewer off and answer immediately |
 | CSS | `overflow-wrap: anywhere` and a scrollable max height on the transcript, so no string can break the layout |
+
+
+## 8.7 AI Failure Recovery — `lib/ai/errors.ts`
+
+**The incident.** Uploading a résumé on the Résumé Coach page showed users *"Failed after 2 attempts. This model is currently experiencing high demand."* Two bugs combined: the fallback chain only failed over on 429/404, so a **503 overload** got two quick SDK retries against the same busy model and gave up; and the résumé-parse route returned `error.message` verbatim.
+
+**One classifier, used everywhere.** `classifyAiError` unwraps the SDK's `RetryError`/`cause` layers and sorts any failure into `unavailable` (5xx, "overloaded", "high demand", dropped connections), `quota` (429 / RESOURCE_EXHAUSTED), `not_found` (retired model), `timeout`, `invalid_output`, or `unknown`.
+
+| Kind | What `withModelFallback` does |
+|---|---|
+| `unavailable` | Retry the **same** model up to 2× with exponential backoff and full jitter (500 ms base, 4 s cap), then fail over |
+| `quota`, `not_found` | Fail over immediately — waiting won't help |
+| `timeout`, `invalid_output`, `unknown` | Rethrow; the caller decides (e.g. the adaptive turn's own malformed-reply retry) |
+
+**Bounded by construction:** at most (2 retries + 1) × models attempts, and a 40 s budget (under the 60 s `maxDuration`). If a backoff wait wouldn't fit the remaining budget, the loop skips it and tries the next model instead of giving up. SDK retries are off so attempts never multiply.
+
+**What users see.** `userMessageFor(error, feature)` returns a short, actionable sentence ("Reading your résumé is temporarily unavailable because the AI service is busy. Please try again in a minute.") — never provider text, attempt counts, or project ids (asserted in tests). Routes answer AI trouble with **503**, never 429: the interview client treats 429 as *our* daily limit, which ends the session. Error toasts carry a one-click **Try again**; a busy interview turn keeps the typed/spoken answer.
+
+**Feedback no longer loses interviews.** If scoring fails at the end, the transcript stays in memory and the candidate gets **Try again** / **Leave without feedback** instead of being redirected with nothing saved.
+
+**Verified with realistic failures:** tests construct the SDK's real `APICallError` (503 with Gemini's actual "high demand" body) and `RetryError` (the exact wrapper from the report), then simulate: a brief overload (recovers on the same model after 250 ms + 500 ms jittered waits), a sustained one (fails over), quota (immediate failover, no waits), every model down (stops after 6 calls), and an exhausted budget.
 
 ---
 
@@ -1925,48 +1946,46 @@ router.refresh();      // re-runs the server component; new résumé appears
 
 ---
 
-# 16. Styling System
+# 16. Styling System & Themes
 
-**Tailwind CSS v4**, configured entirely in CSS — there is no `tailwind.config.js`.
+**Tailwind CSS v4**, configured entirely in CSS (`app/globals.css`) — there is no `tailwind.config.js`.
 
-```css
-@import "tailwindcss";
-@plugin "tailwindcss-animate";
-@custom-variant dark (&:is(.dark *));
+## Design language — "paper & ink"
 
-@theme {
-  --color-primary-100: #dddfff;
-  --color-primary-200: #cac5fe;
-  --color-dark-100: #020408;
-  --color-light-400: #6870a6;
-  --color-success-100: #49de50;
-  --color-destructive-100: #f75353;
-  /* … */
-}
-```
+The product deliberately avoids the stock "AI app" look (purple–blue gradients, glassmorphism, glows, oversized rounded cards):
 
-Values in `@theme` become utility classes automatically — `--color-primary-200` yields `bg-primary-200`, `text-primary-200`, `border-primary-200`.
+- **Warm neutrals** for every surface; **one accent** (burnt orange) used sparingly — focus rings, links, the live/"Start interview" moment, highlights.
+- **Primary actions are solid ink** (near-black in light, near-white in dark); secondary actions are outlined surfaces.
+- **Flat panels with hairline borders** and modest 10–14 px radii; elevation only for menus and dialogs.
+- **Typography:** Mona Sans with tight tracking and a clear scale; a system monospace (`.num`, zero download) for scores and counts so figures line up; small monospace **eyebrow** labels in the accent instead of pill badges.
+- **Motion is functional and short:** 6 px fade-ups, a breathing ring and a three-bar level meter while the interviewer speaks, a red dot while listening, a skeleton shimmer while loading — all disabled under `prefers-reduced-motion`.
 
-The app is **hard-locked to dark mode** via `<html className="dark">` in the root layout. (`next-themes` was previously a dependency, pulled in only by an unused shadcn `Toaster` wrapper; both were removed in the audit — see §23.)
+## Tokens
 
-Semantic component classes (`.card-border`, `.btn-primary`, `.call-view`, `.interviews-section`) are defined in `globals.css` rather than repeated as long utility strings across files.
+Every colour is a semantic CSS variable defined twice — light on `:root`, dark on `.dark`:
 
-**Motion, with accessibility respected:**
+| Token | Role |
+|---|---|
+| `--bg`, `--surface`, `--surface-2`, `--surface-3` | Page, panels, inputs/tiles, hover/selected |
+| `--line`, `--line-strong` | Hairline borders, control borders |
+| `--fg`, `--fg-soft`, `--fg-muted` | Headings, body, secondary text |
+| `--brand` (+ `--brand-fg`, `--brand-soft`) | The single accent |
+| `--ok`, `--warn`, `--bad` | Score and status colours |
+| `--ink`, `--ink-fg` | Primary buttons |
+| `--av-1…6-bg/fg` | Monogram avatar fills per hue |
 
-```css
-.interviews-section > *:nth-child(2) { animation-delay: 0.07s; }
-.interviews-section > *:nth-child(3) { animation-delay: 0.14s; }
+The legacy Tailwind names used across components (`dark-200`, `light-400`, `primary-200`, `success-100`…) are mapped onto these tokens in `@theme inline`, so existing classes theme themselves without touching every component. **Contrast is measured, not eyeballed:** every text token is ≥ 4.5:1 against every surface in both themes (lowest: muted text on the darkest light surface, 4.87:1); body text ≥ 7:1. The light-mode accent and status colours were darkened during the audit to meet this.
 
-@media (prefers-reduced-motion: reduce) {
-  .fade-up, .replay-message, .interviews-section > *,
-  .card-cta, section { animation: none; }
-  .card-border, .card-border:hover { transition: none; transform: none; }
-}
-```
+## Light & dark themes — `lib/theme.ts`, `components/ThemeToggle.tsx`
 
-Staggered `nth-child` delays create a cascade without JavaScript, and the reduced-motion query disables all of it for users who've asked their OS for less animation — a real accessibility requirement, not decoration.
+- **System by default**, following `prefers-color-scheme` live; **Light** or **Dark** can be chosen from the header menu and are saved in `localStorage` (`prepwise-theme`).
+- **No flash of the wrong theme:** a ~300-byte inline script in `<head>` (`NO_FLASH_SCRIPT`) sets the `.dark` class before first paint. Because that class can't match the server HTML, `<html>` alone has `suppressHydrationWarning`.
+- Third-party widgets follow along through `useResolvedTheme()` (a `MutationObserver` on `<html>`): the Monaco editor switches `light`/`vs-dark`, and Sonner toasts switch theme.
+- Browser chrome uses per-scheme `themeColor`; the social preview card is generated from code (`app/opengraph-image.tsx`) in the same palette.
 
----
+## Brand mark — `components/Logo.tsx`
+
+An ink tile holding a four-bar level meter (one bar in the accent) — a voice interview, drawn as inline SVG coloured from tokens, so it is correct in both themes without image assets. It also serves as the AI interviewer's avatar; people are shown as monograms.
 
 # 17. Every Dependency, and Why
 
@@ -2342,7 +2361,7 @@ This codebase does (b), because most readers are only ever called from server co
 
 # 21. Testing & CI
 
-**208 tests across 19 files.** All target deterministic logic — no rendering, and no real network (the two files that touch `fetch` use a fake).
+**224 tests across 21 files.** All target deterministic logic — no rendering, and no real network (the two files that touch `fetch` use a fake).
 
 | File | Covers |
 |---|---|
@@ -2364,6 +2383,8 @@ This codebase does (b), because most readers are only ever called from server co
 | `job-description.test.ts` | JD cleaning and caps, untrusted-data delimiting, overlap/gap/fit split for every size 1–15 |
 | `speech-text.test.ts` | The production comma-loop reply, punctuation runs, echoed instructions, false-positive guards, cleaning, sentence chunking |
 | `company.test.ts` | Company-name cleaning and caps, built-in style matching, monograms, stable colours |
+| `ai-errors.test.ts` | Failure classification with the SDK's real `APICallError`/`RetryError`, user messages never leak provider text, jittered backoff bounds, fallback simulations (brief overload, sustained overload, quota, all models down, budget) |
+| `theme.test.ts` | Theme resolution, stored-value validation, the pre-paint script is self-contained |
 | `library.test.ts` | Collection-name cleaning, case-insensitive grouping and counts, URL view parsing, All / collection / Archived filtering (deleted never shown) |
 
 **The testing philosophy is explicit:** test what is deterministic. There are no tests asserting Gemini returns particular text — that would be flaky and would test the model rather than the code. Instead:
