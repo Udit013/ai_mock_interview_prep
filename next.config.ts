@@ -1,5 +1,6 @@
 import type { NextConfig } from "next";
 import path from "path";
+import { JS_WORKER_CSP, PY_WORKER_CSP } from "./lib/security/csp";
 
 const nextConfig: NextConfig = {
   // Don't advertise the framework in an `x-powered-by` response header.
@@ -47,17 +48,13 @@ const nextConfig: NextConfig = {
             key: "Permissions-Policy",
             value: "microphone=(self), camera=(), geolocation=()",
           },
-          // A CSP subset that can't break the app: no framing, no plugins,
-          // no <base> hijacking, forms only post back to us. Script/style
-          // sources are left open because Monaco, Pyodide and Firebase load
-          // from CDNs; tightening those needs per-request nonces.
-          {
-            key: "Content-Security-Policy",
-            value: "frame-ancestors 'none'; base-uri 'self'; object-src 'none'; form-action 'self'",
-          },
+          // Pages get a nonce-based CSP from middleware.ts.
           // HSTS is already sent by Vercel on every deployment.
         ],
       },
+      // Code-runner workers: their own narrow policies (lib/security/csp.ts).
+      { source: "/runner/js-worker.js", headers: [{ key: "Content-Security-Policy", value: JS_WORKER_CSP }] },
+      { source: "/runner/py-worker.js", headers: [{ key: "Content-Security-Policy", value: PY_WORKER_CSP }] },
     ];
   },
 };

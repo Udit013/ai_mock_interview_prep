@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from "next";
+import { headers } from "next/headers";
 import { Mona_Sans } from "next/font/google";
 
 import "./globals.css";
@@ -54,17 +55,25 @@ export const viewport: Viewport = {
   initialScale: 1,
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const nonce = (await headers()).get("x-nonce") ?? undefined;
+
   return (
     // The theme class is set by NO_FLASH_SCRIPT before paint, so the server
-    // markup can't match it — hence suppressHydrationWarning on <html> only.
+    // markup can't match it — hence suppressHydrationWarning on <html>.
     <html lang="en" suppressHydrationWarning>
       <head>
-        <script dangerouslySetInnerHTML={{ __html: NO_FLASH_SCRIPT }} />
+        {/* Carries the per-request CSP nonce. Browsers hide nonce attributes
+            from the DOM after load, hence suppressHydrationWarning. */}
+        <script
+          nonce={nonce}
+          suppressHydrationWarning
+          dangerouslySetInnerHTML={{ __html: NO_FLASH_SCRIPT }}
+        />
       </head>
       <body className={`${monaSans.className} antialiased`}>
         <a href="#main-content" className="skip-link">
