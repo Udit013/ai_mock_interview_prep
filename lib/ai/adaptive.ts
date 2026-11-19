@@ -392,7 +392,7 @@ Update the interview state (carry forward prior strengths, weaknesses, and topic
     withModelFallback("interview", (model) => generateObject({
       model,
       maxRetries: MODEL_MAX_RETRIES,
-      maxTokens: TURN_MAX_TOKENS,
+      maxOutputTokens: TURN_MAX_TOKENS,
       abortSignal: aiAbortSignal(),
       schema: adaptiveTurnSchema,
       prompt: prompt + extra,

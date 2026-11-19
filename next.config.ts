@@ -10,6 +10,12 @@ const nextConfig: NextConfig = {
       __dirname,
       "lib/buffer-shim.js"
     );
+    // ai@5's provider-utils has an optional dynamic import webpack can't
+    // analyse ("Critical dependency"). Harmless; silenced for that module only.
+    config.ignoreWarnings = [
+      ...(config.ignoreWarnings ?? []),
+      { module: /@ai-sdk[\\/]provider-utils/, message: /Critical dependency/ },
+    ];
     return config;
   },
   turbopack: {
